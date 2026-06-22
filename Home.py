@@ -194,15 +194,11 @@ st.markdown("""
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
-/* ── Upload zone ── */
-.upload-zone {
-    border: 2px dashed #1D9E75; border-radius: 20px;
-    background: rgba(29,158,117,0.04);
-    padding: 40px 24px; text-align: center; margin-bottom: 24px;
+/* ── Upload zone — force-hide Streamlit file uploader label ── */
+div[data-testid="stFileUploader"] label,
+div[data-testid="stFileUploaderLabel"] {
+    display: none !important;
 }
-.upload-icon { font-size: 2.5rem; margin-bottom: 12px; }
-.upload-title { font-size: 1.05rem; font-weight: 700; color: #0f172a !important; margin-bottom: 6px; }
-.upload-sub   { font-size: 0.82rem; color: #334155 !important; }
 
 /* ── Status badges ── */
 .badge-approved  { background:#dcfce7; color:#166534; border:1.5px solid #86efac; padding:6px 18px; border-radius:999px; font-weight:700; font-size:0.9rem; display:inline-flex; align-items:center; gap:6px; }
