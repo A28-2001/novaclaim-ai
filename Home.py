@@ -85,16 +85,15 @@ components.html("""
 (function() {
     var p = window.parent.document;
 
-    // 1. Inject Material Symbols Rounded font into parent document
-    if (!p.getElementById('nc-material-symbols')) {
-        var link = p.createElement('link');
-        link.id   = 'nc-material-symbols';
-        link.rel  = 'stylesheet';
-        link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block';
-        p.head.appendChild(link);
+    // 1. Inject CSS into parent to hide broken icon text AND fix sidebar button
+    if (!p.getElementById('nc-icon-fix')) {
+        var style = p.createElement('style');
+        style.id = 'nc-icon-fix';
+        style.textContent = '.material-symbols-rounded { display: none !important; }';
+        p.head.appendChild(style);
     }
 
-    // 2. Hide sidebar collapse/expand button
+    // 2. Hide sidebar collapse/expand button by content text as well
     function hideSidebarBtn() {
         ['collapsedControl','stSidebarCollapsedControl','stSidebarCollapseButton']
         .forEach(function(id) {
