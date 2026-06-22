@@ -102,6 +102,13 @@ st.markdown("""
 *, body, .stApp { font-family: 'Inter', sans-serif !important; }
 .stApp { background: #f7f8fc; color: #0f172a; }
 
+/* ── Hide Streamlit header bar (removes keyboard_double icon) ── */
+header[data-testid="stHeader"] { display: none !important; }
+.stAppDeployButton { display: none !important; }
+
+/* ── Force-hide file uploader label ── */
+div[data-testid="stFileUploader"] label { display: none !important; }
+
 /* ── Sidebar: dark bg needs light text ── */
 [data-testid="stSidebar"] { background: #0f172a !important; border-right: none; }
 [data-testid="stSidebar"] * { color: #e2e8f0 !important; }
@@ -606,10 +613,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 uploaded_files = st.file_uploader(
-    "Upload",
+    "prior_auth_uploader",
     type=["pdf","txt"],
     accept_multiple_files=True,
-    label_visibility="collapsed",
+    label_visibility="hidden",
 )
 
 if not uploaded_files and not st.session_state.history:
