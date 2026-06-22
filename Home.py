@@ -142,6 +142,9 @@ st.markdown("""
 *, body, .stApp { font-family: 'Inter', sans-serif !important; }
 .stApp { background: #f7f8fc; color: #0f172a; }
 
+/* ── Hide Material Symbols icons that show as broken text when font fails ── */
+.material-symbols-rounded { display: none !important; }
+
 
 /* ── Sidebar: dark bg needs light text ── */
 [data-testid="stSidebar"] { background: #0f172a !important; border-right: none; }
