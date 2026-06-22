@@ -102,7 +102,8 @@ st.markdown("""
 *, body, .stApp { font-family: 'Inter', sans-serif !important; }
 .stApp { background: #f7f8fc; color: #0f172a; }
 
-
+/* ── Hide sidebar collapse button (broken icon shows as text) ── */
+.stSidebarCollapseButton { display: none !important; }
 
 /* ── Sidebar: dark bg needs light text ── */
 [data-testid="stSidebar"] { background: #0f172a !important; border-right: none; }
