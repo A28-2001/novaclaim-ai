@@ -1,0 +1,65 @@
+PRIOR AUTHORIZATION REQUEST FORM
+============================================================
+
+PAYOR INFORMATION
+-----------------
+Insurance Company: Aetna Health Plans
+Plan Name: HMO Select 1000
+Group Number: GRP-229871
+Member ID: AET-330481920
+
+PATIENT INFORMATION
+-------------------
+Patient Name: Robert D. Kessler
+Date of Birth: 1965-08-22
+Address: 4712 N Clark St, Chicago, IL 60640
+Phone: (773) 555-0347
+
+REQUESTING PROVIDER
+-------------------
+Provider Name: Dr. Sandra L. Cho, MD
+NPI: 9876543210
+Specialty: Orthopedic Surgery
+Facility: Rush University Medical Center
+Facility Address: 1620 W Harrison St, Chicago, IL 60612
+Phone: (312) 942-5000
+Fax: (312) 942-2000
+
+DATE OF REQUEST: 2024-10-15
+
+CLINICAL INFORMATION
+--------------------
+Primary Diagnosis: Degenerative joint disease, left knee
+ICD-10 Code: M17.12
+
+TREATMENT REQUESTED
+-------------------
+Service/Procedure: Total left knee arthroplasty (TKA)
+CPT Code: 27447
+Requested Date: 2024-11-10
+Place of Service: Inpatient hospital
+
+CLINICAL JUSTIFICATION
+-----------------------
+Patient presents with severe osteoarthritis of the left knee with bone-on-bone
+changes confirmed on X-ray (Kellgren-Lawrence Grade 4). Patient has failed
+6 months of conservative therapy including physical therapy (20 sessions),
+NSAIDs, and two corticosteroid injections. VAS pain score: 8/10. BMI: 28.4.
+KOOS score: 32 (severe functional impairment). Patient is unable to climb
+stairs or walk more than one city block without significant pain.
+
+AUTHORIZATION DECISION
+----------------------
+Status: DENIED
+Decision Date: 2024-10-22
+Denial Reason: Requested procedure does not meet medical necessity criteria.
+Medical records do not sufficiently document failure of all required
+conservative treatment modalities. Specifically, documentation of physical
+therapy is incomplete — only 12 of the required 20 sessions were documented
+in submitted records. Additionally, hyaluronic acid (viscosupplementation)
+injections were not attempted prior to surgical request, as required per
+plan guidelines (Policy MED-0042).
+
+Appeal Deadline: 2024-11-22
+Reviewer: Dr. T. Nguyen, MD (Orthopedic Medicine)
+============================================================

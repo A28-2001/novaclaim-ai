@@ -1,0 +1,62 @@
+PRIOR AUTHORIZATION REQUEST FORM
+============================================================
+
+PAYOR INFORMATION
+-----------------
+Insurance Company: Humana
+Plan Name: Gold Plus HMO
+Group Number: GRP-338821
+Member ID: HUM-109384720
+
+PATIENT INFORMATION
+-------------------
+Patient Name: Thomas W. Nakamura
+Date of Birth: 1951-03-29
+Address: 5510 Peachtree Rd NE, Atlanta, GA 30305
+Phone: (404) 555-0733
+
+REQUESTING PROVIDER
+-------------------
+Provider Name: Dr. Rachel S. Patel, MD
+NPI: 7890123456
+Specialty: Thoracic Oncology
+Facility: Emory University Hospital
+Facility Address: 1364 Clifton Rd NE, Atlanta, GA 30322
+Phone: (404) 712-7021
+
+DATE OF REQUEST: 2024-11-12
+
+CLINICAL INFORMATION
+--------------------
+Primary Diagnosis: Malignant neoplasm of the upper lobe, right bronchus or lung
+ICD-10 Code: C34.11
+
+Secondary Diagnosis: Secondary malignant neoplasm of intrathoracic lymph nodes
+ICD-10 Code: C77.1
+
+TREATMENT REQUESTED
+-------------------
+Service/Procedure: Pembrolizumab (Keytruda) 200mg IV every 3 weeks — 4 cycles
+CPT Code: 96413
+Requested Start Date: 2024-12-01
+Place of Service: Outpatient infusion center
+
+CLINICAL JUSTIFICATION
+-----------------------
+Patient is a 73-year-old male with newly diagnosed Stage IIIA non-small cell lung
+cancer (adenocarcinoma), PD-L1 expression 72% (high). EGFR/ALK negative.
+CT scan and PET confirmed mediastinal lymph node involvement. Patient is not a
+surgical candidate due to reduced pulmonary reserve (FEV1 58%). Pembrolizumab
+monotherapy is indicated per NCCN guidelines (Category 1) for PD-L1 ≥50% Stage
+III NSCLC in patients not eligible for chemoradiation. ECOG status: 1.
+No autoimmune contraindications identified.
+
+AUTHORIZATION DECISION
+----------------------
+Status: Pending
+Decision Date: N/A
+Notes: Additional clinical records requested by Humana Medical Review team.
+Awaiting submission of: (1) full pathology report confirming PD-L1 score,
+(2) most recent PFT results, (3) tumor board consultation note.
+Expected decision within 5 business days of receipt of requested records.
+============================================================

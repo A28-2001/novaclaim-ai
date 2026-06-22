@@ -1,0 +1,61 @@
+PRIOR AUTHORIZATION REQUEST FORM
+============================================================
+
+PAYOR INFORMATION
+-----------------
+Insurance Company: Cigna Health and Life Insurance
+Plan Name: Open Access Plus
+Group Number: GRP-771034
+Member ID: CIG-558204817
+
+PATIENT INFORMATION
+-------------------
+Patient Name: Angela R. Foster
+Date of Birth: 1982-06-14
+Address: 3322 Birchwood Ln, Denver, CO 80203
+Phone: (720) 555-0419
+
+REQUESTING PROVIDER
+-------------------
+Provider Name: Dr. Kevin B. Okafor, MD
+NPI: 5678901234
+Specialty: Orthopedic Surgery
+Facility: UCHealth University of Colorado Hospital
+Facility Address: 12605 E 16th Ave, Aurora, CO 80045
+Phone: (720) 848-0000
+
+DATE OF REQUEST: 2024-10-28
+
+CLINICAL INFORMATION
+--------------------
+Primary Diagnosis: Low back pain with radiculopathy
+ICD-10 Code: M54.42
+
+TREATMENT REQUESTED
+-------------------
+Service/Procedure: MRI lumbar spine without contrast
+CPT Code: 72148
+Requested Date: 2024-11-05
+Place of Service: Outpatient imaging center
+
+CLINICAL JUSTIFICATION
+-----------------------
+Patient presents with 3 weeks of low back pain radiating to the left leg (L4-L5 distribution).
+Pain score 6/10 at rest, 9/10 with activity. Patient was seen once in primary care and
+referred directly to orthopedics. Provider requests MRI to rule out disc herniation
+before initiating treatment.
+
+AUTHORIZATION DECISION
+----------------------
+Status: Denied
+Decision Date: 2024-11-01
+Denial Reason: Does not meet medical necessity criteria per Cigna coverage policy
+MUSCULO-020. MRI for low back pain requires documentation of at least 6 weeks of
+conservative treatment failure including physical therapy (minimum 8 sessions),
+NSAIDs at therapeutic dose, and activity modification. Patient has not completed
+conservative treatment prior to advanced imaging request. Recommend initiating
+physical therapy and NSAIDs first. Re-submit after 6 weeks if symptoms persist.
+
+Appeal Deadline: 2024-12-01
+Reviewer: Dr. H. Kim, MD (Radiology)
+============================================================

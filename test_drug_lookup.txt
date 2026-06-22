@@ -1,0 +1,26 @@
+PRIOR AUTHORIZATION REQUEST
+===========================
+Date: June 20, 2026
+
+PATIENT INFORMATION
+Patient Name: Dorothy Kim
+Date of Birth: 1952-11-30
+Member ID: AET-7723900
+Insurance Plan: Aetna Medicare Advantage
+
+PROVIDER INFORMATION
+Provider Name: Dr. Samuel Okafor
+Provider NPI: 1134152443
+Facility: Heartland Cardiology Associates
+
+CLINICAL INFORMATION
+Diagnosis: Essential (primary) hypertension with chronic heart failure
+Diagnosis Code: I10
+Treatment Requested: Lisinopril 10mg tablet once daily for blood pressure management
+CPT Code: 99214
+
+AUTHORIZATION DETAILS
+Approval Status: Approved
+Approval Date: 2026-06-18
+Authorization Number: AUTH-2026-091004
+Notes: Patient intolerant to ARB class. ACE inhibitor appropriate per ACC/AHA guidelines.

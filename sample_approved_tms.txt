@@ -1,0 +1,61 @@
+PRIOR AUTHORIZATION REQUEST FORM
+============================================================
+
+PAYOR INFORMATION
+-----------------
+Insurance Company: Anthem Blue Cross Blue Shield
+Plan Name: BlueAccess PPO
+Group Number: GRP-664503
+Member ID: ANT-773920041
+
+PATIENT INFORMATION
+-------------------
+Patient Name: Sarah J. Whitfield
+Date of Birth: 1990-08-18
+Address: 742 Lakeview Ave, Columbus, OH 43215
+Phone: (614) 555-0561
+
+REQUESTING PROVIDER
+-------------------
+Provider Name: Dr. Marcus D. Greene, MD
+NPI: 2345678901
+Specialty: Psychiatry
+Facility: OhioHealth Riverside Methodist Hospital
+Facility Address: 3535 Olentangy River Rd, Columbus, OH 43214
+Phone: (614) 566-5000
+
+DATE OF REQUEST: 2024-08-22
+
+CLINICAL INFORMATION
+--------------------
+Primary Diagnosis: Major depressive disorder, recurrent, severe without psychotic features
+ICD-10 Code: F33.2
+
+TREATMENT REQUESTED
+-------------------
+Service/Procedure: Transcranial Magnetic Stimulation (TMS) therapy — 36 sessions
+CPT Code: 90867
+Requested Start Date: 2024-09-15
+Place of Service: Outpatient psychiatric clinic
+
+CLINICAL JUSTIFICATION
+-----------------------
+Patient has a 7-year history of recurrent major depressive disorder. Has failed four
+adequate antidepressant trials (Sertraline 200mg, Escitalopram 20mg, Venlafaxine 225mg,
+Bupropion 450mg) each for minimum 8 weeks at therapeutic dose, documented in medical records.
+Patient also completed 24 sessions of CBT without sustained remission. PHQ-9 score: 19
+(severe). Patient is not a candidate for ECT due to patient preference and absence of
+psychotic features. TMS is FDA-cleared and indicated per APA guidelines for
+treatment-resistant depression. No seizure history or contraindicated metal implants.
+
+AUTHORIZATION DECISION
+----------------------
+Status: Approved
+Authorization Number: AUTH-2024-00389147
+Approval Date: 2024-08-29
+Valid Through: 2024-12-29
+Approved Units: 36 TMS sessions
+
+Notes: Approved for treatment-resistant MDD per Anthem clinical policy PSY-048.
+Patient must maintain concurrent psychiatric medication management throughout TMS course.
+============================================================

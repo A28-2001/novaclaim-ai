@@ -1,0 +1,28 @@
+PRIOR AUTHORIZATION REQUEST
+===========================
+Date: June 20, 2026
+
+PATIENT INFORMATION
+Patient Name: Marcus Rivera
+Date of Birth: 1965-09-02
+Member ID: BCBS-4490128
+Insurance Plan: Blue Cross Blue Shield PPO Platinum
+
+PROVIDER INFORMATION
+Provider Name: Dr. Angela Chen MD
+Provider NPI: 1457471942
+Facility: Pacific Coast Oncology Center
+
+CLINICAL INFORMATION
+Primary Diagnosis: Malignant neoplasm of upper-outer quadrant of right female breast
+Diagnosis Code: C50.411
+Secondary Diagnosis: Secondary malignant neoplasm of bone
+Secondary Diagnosis Code: C79.51
+Treatment Requested: Trastuzumab (Herceptin) 6mg/kg IV infusion every 21 days
+CPT Code: 96413
+
+AUTHORIZATION DETAILS
+Approval Status: Approved
+Approval Date: 2026-06-15
+Authorization Number: AUTH-2026-088821
+Notes: HER2-positive confirmed by biopsy. Treatment per NCCN guidelines.

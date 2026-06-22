@@ -1,0 +1,64 @@
+PRIOR AUTHORIZATION REQUEST FORM
+============================================================
+
+PAYOR INFORMATION
+-----------------
+Insurance Company: BlueCross BlueShield of Illinois
+Plan Name: PPO Gold 500
+Group Number: GRP-884421
+Member ID: BCB-774920183
+
+PATIENT INFORMATION
+-------------------
+Patient Name: Maria Elena Gonzalez
+Date of Birth: 1978-04-15
+Address: 2241 W Fullerton Ave, Chicago, IL 60647
+Phone: (312) 555-0192
+
+REQUESTING PROVIDER
+-------------------
+Provider Name: Dr. James R. Hartwell, MD
+NPI: 1234567890
+Specialty: Oncology
+Facility: Northwestern Memorial Hospital
+Facility Address: 251 E Huron St, Chicago, IL 60611
+Phone: (312) 926-2000
+Fax: (312) 926-9999
+
+DATE OF REQUEST: 2024-11-03
+
+CLINICAL INFORMATION
+--------------------
+Primary Diagnosis: Breast cancer, right upper-outer quadrant
+ICD-10 Code: C50.411
+
+Secondary Diagnosis: Lymphedema following mastectomy
+ICD-10 Code: I97.2
+
+TREATMENT REQUESTED
+-------------------
+Service/Procedure: Pertuzumab (Perjeta) 420mg IV infusion — 6 cycles
+CPT Code: 96413
+Requested Start Date: 2024-11-20
+Place of Service: Outpatient infusion center
+
+CLINICAL JUSTIFICATION
+-----------------------
+Patient has HER2-positive early breast cancer confirmed via biopsy on 2024-09-18.
+She has completed surgery (lumpectomy) and is being evaluated for neoadjuvant
+chemotherapy. Pertuzumab in combination with trastuzumab and docetaxel is the
+standard of care per NCCN guidelines (Category 1 recommendation).
+Patient has no prior exposure to anti-HER2 therapy.
+ECOG performance status: 1. No contraindications identified.
+
+AUTHORIZATION DECISION
+----------------------
+Status: APPROVED
+Authorization Number: AUTH-2024-00448821
+Approval Date: 2024-11-07
+Valid Through: 2025-05-07
+Approved Units: 6 infusion sessions
+
+Notes: Prior authorization approved for 6 cycles of Pertuzumab 420mg IV per NCCN
+guidelines for HER2+ breast cancer. Re-authorization required after cycle 6.
+============================================================

@@ -1,0 +1,25 @@
+PRIOR AUTHORIZATION REQUEST
+===========================
+Date: June 20, 2026
+
+PATIENT INFORMATION
+Patient Name: Sarah Johnson
+Date of Birth: 1978-03-14
+Member ID: UHC-8821045
+Insurance Plan: UnitedHealthcare Gold PPO
+
+PROVIDER INFORMATION
+Provider Name: Dr. Robert Jacobson
+Provider NPI: 1679576722
+Facility: Northwestern Medical Group
+Facility NPI: 1003800586
+
+CLINICAL INFORMATION
+Diagnosis: Type 2 Diabetes Mellitus with diabetic chronic kidney disease, stage 3
+Diagnosis Code: E11.65
+Treatment Requested: Jardiance (Empagliflozin) 10mg tablet, once daily
+CPT Code: 99213
+
+AUTHORIZATION DETAILS
+Approval Status: Pending
+Notes: Patient has failed metformin therapy over 6 months. Requesting cardioprotective agent per ADA 2024 guidelines.

@@ -1,0 +1,87 @@
+<svg width="480" height="160" viewBox="0 0 480 160" xmlns="http://www.w3.org/2000/svg" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <!-- Primary gradient: teal to indigo -->
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#1D9E75"/>
+      <stop offset="55%"  stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+
+    <!-- Glow filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <!-- Subtle drop shadow -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="rgba(29,158,117,0.25)"/>
+    </filter>
+
+    <!-- Icon inner gradient (lighter) -->
+    <linearGradient id="inner-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#22c55e" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="white"   stop-opacity="0.05"/>
+    </linearGradient>
+
+    <!-- Spark gradient -->
+    <radialGradient id="spark-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- ── Icon mark ─────────────────────────────── -->
+  <!-- Outer rounded square with gradient fill -->
+  <rect x="16" y="16" width="128" height="128" rx="30" ry="30"
+        fill="url(#grad1)" filter="url(#shadow)"/>
+
+  <!-- Subtle inner highlight overlay -->
+  <rect x="16" y="16" width="128" height="128" rx="30" ry="30"
+        fill="url(#inner-grad)"/>
+
+  <!-- Top-edge gloss line -->
+  <rect x="32" y="17" width="96" height="2" rx="1"
+        fill="white" opacity="0.18"/>
+
+  <!-- NC lettermark -->
+  <!-- N -->
+  <text x="30" y="107" font-size="74" font-weight="900" fill="white"
+        letter-spacing="-4" opacity="0.95">N</text>
+  <!-- C (slightly overlapping, slightly offset) -->
+  <text x="72" y="107" font-size="74" font-weight="900" fill="white"
+        letter-spacing="-4" opacity="0.95">C</text>
+
+  <!-- Geometric cross-bar accent (between N and C) -->
+  <rect x="74" y="54" width="3" height="52" rx="1.5"
+        fill="white" opacity="0.35"/>
+
+  <!-- Gold spark dot (top-right of icon) -->
+  <circle cx="124" cy="28" r="8" fill="url(#spark-grad)" filter="url(#glow)"/>
+  <circle cx="124" cy="28" r="4" fill="#fbbf24"/>
+
+  <!-- Small decorative circuit-dot at bottom-left -->
+  <circle cx="28" cy="132" r="4" fill="white" opacity="0.25"/>
+  <line x1="28" y1="128" x2="28" y2="118" stroke="white" stroke-width="1.5" stroke-opacity="0.2" stroke-dasharray="2,2"/>
+
+  <!-- ── Wordmark ─────────────────────────────── -->
+  <!-- "NovaClaim" -->
+  <text x="168" y="82" font-size="38" font-weight="900" fill="#0f172a" letter-spacing="-1.5">
+    Nova<tspan fill="#1D9E75">Claim</tspan>
+  </text>
+
+  <!-- "AI" badge -->
+  <rect x="168" y="96" width="28" height="18" rx="5"
+        fill="#1D9E75"/>
+  <text x="182" y="109" font-size="10" font-weight="800" fill="white"
+        text-anchor="middle" letter-spacing="0.5">AI</text>
+
+  <!-- Tagline -->
+  <text x="204" y="109" font-size="11.5" font-weight="600" fill="#64748b" letter-spacing="2">
+    PRIOR AUTH INTELLIGENCE
+  </text>
+
+  <!-- Subtle separator line between wordmark and tagline -->
+  <line x1="168" y1="92" x2="455" y2="92"
+        stroke="#e2e8f0" stroke-width="1"/>
+</svg>

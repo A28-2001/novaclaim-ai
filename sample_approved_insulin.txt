@@ -1,0 +1,61 @@
+PRIOR AUTHORIZATION REQUEST FORM
+============================================================
+
+PAYOR INFORMATION
+-----------------
+Insurance Company: UnitedHealthcare
+Plan Name: Choice Plus PPO
+Group Number: GRP-554312
+Member ID: UHC-882047391
+
+PATIENT INFORMATION
+-------------------
+Patient Name: David A. Thornton
+Date of Birth: 1958-11-03
+Address: 881 Maple Ridge Dr, Indianapolis, IN 46202
+Phone: (317) 555-0284
+
+REQUESTING PROVIDER
+-------------------
+Provider Name: Dr. Patricia M. Ellison, MD
+NPI: 3456789012
+Specialty: Endocrinology
+Facility: Indiana University Health Methodist Hospital
+Facility Address: 1701 N Senate Ave, Indianapolis, IN 46202
+Phone: (317) 962-2000
+
+DATE OF REQUEST: 2024-09-10
+
+CLINICAL INFORMATION
+--------------------
+Primary Diagnosis: Type 2 diabetes mellitus with diabetic chronic kidney disease, stage 3
+ICD-10 Code: E11.65
+
+TREATMENT REQUESTED
+-------------------
+Service/Procedure: Insulin pump (Medtronic MiniMed 780G) with continuous glucose monitoring
+CPT Code: 95249
+Requested Start Date: 2024-10-01
+Place of Service: Home use / outpatient
+
+CLINICAL JUSTIFICATION
+-----------------------
+Patient has had uncontrolled Type 2 diabetes for 14 years with HbA1c of 10.2% despite
+maximum dose oral medications (Metformin 2000mg/day, Empagliflozin 25mg/day) and
+multiple daily insulin injections. Patient experiences frequent hypoglycemic episodes
+(documented: 3 episodes in past 30 days). CKD Stage 3 limits further medication
+escalation. Continuous glucose monitoring with pump therapy is medically necessary
+per ADA Standards of Care (2024) for patients with recurrent hypoglycemia.
+BMI: 31.2. Patient has completed diabetes education program (5 sessions).
+
+AUTHORIZATION DECISION
+----------------------
+Status: Approved
+Authorization Number: AUTH-2024-00551204
+Approval Date: 2024-09-17
+Valid Through: 2025-09-17
+Approved Units: 1 insulin pump system + 12 months CGM supplies
+
+Notes: Approved per ADA guidelines for uncontrolled T2DM with recurrent hypoglycemia.
+Annual review required. Patient must attend pump training before activation.
+============================================================

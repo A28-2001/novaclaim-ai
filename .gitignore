@@ -1,0 +1,20 @@
+# Secrets — never commit these
+.streamlit/secrets.toml
+
+# Database — excluded from repo (generated at runtime)
+prior_auth.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+
+# Old entry point (replaced by Home.py)
+app.py

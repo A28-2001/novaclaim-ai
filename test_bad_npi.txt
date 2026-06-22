@@ -1,0 +1,24 @@
+PRIOR AUTHORIZATION REQUEST
+===========================
+Date: June 20, 2026
+
+PATIENT INFORMATION
+Patient Name: James Thornton
+Date of Birth: 1980-07-19
+Member ID: CIG-3381027
+Insurance Plan: Cigna Open Access Plus
+
+PROVIDER INFORMATION
+Provider Name: Dr. Michael Sterling
+Provider NPI: 1234567890
+Facility: Riverside General Hospital
+
+CLINICAL INFORMATION
+Diagnosis: Generalized anxiety disorder
+Diagnosis Code: F41.1
+Treatment Requested: Escitalopram 10mg tablet once daily
+CPT Code: 90837
+
+AUTHORIZATION DETAILS
+Approval Status: Pending
+Notes: Patient has trialed two prior SSRIs without adequate response. Requesting continuation of current effective therapy.

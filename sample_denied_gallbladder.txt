@@ -1,0 +1,64 @@
+PRIOR AUTHORIZATION REQUEST FORM
+============================================================
+
+PAYOR INFORMATION
+-----------------
+Insurance Company: Molina Healthcare
+Plan Name: Marketplace Silver 70
+Group Number: GRP-229103
+Member ID: MOL-441038822
+
+PATIENT INFORMATION
+-------------------
+Patient Name: Carlos M. Reyes
+Date of Birth: 1974-02-07
+Address: 1847 Sunset Blvd, Los Angeles, CA 90026
+Phone: (213) 555-0892
+
+REQUESTING PROVIDER
+-------------------
+Provider Name: Dr. Linda H. Tran, MD
+NPI: 8901234567
+Specialty: General Surgery
+Facility: Cedars-Sinai Medical Center
+Facility Address: 8700 Beverly Blvd, Los Angeles, CA 90048
+Phone: (310) 423-3277
+
+DATE OF REQUEST: 2024-10-05
+
+CLINICAL INFORMATION
+--------------------
+Primary Diagnosis: Calculus of gallbladder with chronic cholecystitis
+ICD-10 Code: K80.10
+
+TREATMENT REQUESTED
+-------------------
+Service/Procedure: Laparoscopic cholecystectomy
+CPT Code: 47562
+Requested Date: 2024-10-25
+Place of Service: Outpatient surgery center
+
+CLINICAL JUSTIFICATION
+-----------------------
+Patient presents with a 4-month history of right upper quadrant pain after meals.
+Ultrasound confirms cholelithiasis with multiple stones (largest 1.2cm). No fever,
+no jaundice, no elevated WBC at time of visit. Provider recommends elective
+laparoscopic cholecystectomy. One ER visit documented for abdominal pain (discharged
+same day, no acute cholecystitis confirmed).
+
+AUTHORIZATION DECISION
+----------------------
+Status: Denied
+Decision Date: 2024-10-11
+Denial Reason: Request does not meet Molina Healthcare medical necessity criteria
+for elective cholecystectomy (Policy SURG-014). Submitted records do not document
+a recent acute cholecystitis episode confirmed by imaging or labs, biliary colic
+frequency (minimum 3 documented episodes in medical record required), or dietary
+modification trial. Additionally, operative risk assessment (ASA classification)
+was not included in the submission. Provider must resubmit with complete clinical
+documentation including pain frequency log, dietary consultation note, and updated
+lab panel (CBC, LFTs, lipase).
+
+Appeal Deadline: 2024-11-11
+Reviewer: Dr. F. Adeyemi, MD (General Surgery)
+============================================================
