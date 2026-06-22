@@ -85,6 +85,8 @@ components.html("""
 (function() {
     var p = window.parent.document;
 
+    var ICON_PATTERN = /^[a-z][a-z_]{3,}$/;  // matches "upload", "arrow_right", etc.
+
     function fixAll() {
         // 1. Hide sidebar collapse button
         ['collapsedControl','stSidebarCollapsedControl','stSidebarCollapseButton']
@@ -93,28 +95,28 @@ components.html("""
              .forEach(function(el) { el.style.display = 'none'; });
         });
 
-        // 2. Hide ALL material-symbols-rounded spans (broken icon text)
-        p.querySelectorAll('.material-symbols-rounded').forEach(function(el) {
-            el.style.display = 'none';
+        // 2. Hide any span/element whose FULL text is a Material Symbols icon name
+        //    (all lowercase + underscores, no spaces — e.g. "upload", "arrow_right")
+        p.querySelectorAll('span, i').forEach(function(el) {
+            var t = (el.textContent || '').trim();
+            if (ICON_PATTERN.test(t)) {
+                el.style.display = 'none';
+            }
         });
 
-        // 3. Fix "uploadUpload" button — overwrite text directly
+        // 3. Also hide buttons containing the sidebar arrow text
         p.querySelectorAll('button').forEach(function(btn) {
-            var t = (btn.innerText || '').trim();
-            if (t.toLowerCase() === 'uploadupload' || t === 'uploadUpload') {
-                btn.innerText = 'Browse files';
-            }
-            if (t.includes('keyboard_double_arrow')) {
+            if ((btn.innerText || '').includes('keyboard_double_arrow')) {
                 btn.style.display = 'none';
             }
         });
     }
 
     fixAll();
-    setTimeout(fixAll, 300);
-    setTimeout(fixAll, 1000);
-    setTimeout(fixAll, 3000);
-    new MutationObserver(fixAll).observe(
+    setTimeout(fixAll, 500);
+    setTimeout(fixAll, 1500);
+    setTimeout(fixAll, 4000);
+    new MutationObserver(function() { fixAll(); }).observe(
         p.documentElement, { childList: true, subtree: true }
     );
 })();
@@ -829,7 +831,7 @@ if st.session_state.history:
             if badge_pills else ""
         )
 
-        with st.expander(f"{icon}  {entry['filename']}  ·  {status}  ·  {score}% complete", expanded=(idx==0)):
+        with st.expander(f"{entry['filename']}  [{status}  ·  {score}% complete]", expanded=(idx==0)):
             # ── Status banner ──────────────────────────────────────────────────
             banner_bg   = {"Approved":"#f0fdf4","Denied":"#fef2f2","Pending":"#fffbeb","Unknown":"#f8fafc"}.get(status,"#f8fafc")
             banner_bdr  = {"Approved":"#86efac","Denied":"#fca5a5","Pending":"#fcd34d","Unknown":"#e2e8f0"}.get(status,"#e2e8f0")
