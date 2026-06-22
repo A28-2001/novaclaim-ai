@@ -85,32 +85,36 @@ components.html("""
 (function() {
     var p = window.parent.document;
 
-    // 1. Inject CSS into parent to hide broken icon text AND fix sidebar button
-    if (!p.getElementById('nc-icon-fix')) {
-        var style = p.createElement('style');
-        style.id = 'nc-icon-fix';
-        style.textContent = '.material-symbols-rounded { display: none !important; }';
-        p.head.appendChild(style);
-    }
-
-    // 2. Hide sidebar collapse/expand button by content text as well
-    function hideSidebarBtn() {
+    function fixAll() {
+        // 1. Hide sidebar collapse button
         ['collapsedControl','stSidebarCollapsedControl','stSidebarCollapseButton']
         .forEach(function(id) {
             p.querySelectorAll('[data-testid="' + id + '"]')
              .forEach(function(el) { el.style.display = 'none'; });
         });
+
+        // 2. Hide ALL material-symbols-rounded spans (broken icon text)
+        p.querySelectorAll('.material-symbols-rounded').forEach(function(el) {
+            el.style.display = 'none';
+        });
+
+        // 3. Fix "uploadUpload" button — overwrite text directly
         p.querySelectorAll('button').forEach(function(btn) {
-            if (btn.innerText && btn.innerText.includes('keyboard_double_arrow')) {
+            var t = (btn.innerText || '').trim();
+            if (t.toLowerCase() === 'uploadupload' || t === 'uploadUpload') {
+                btn.innerText = 'Browse files';
+            }
+            if (t.includes('keyboard_double_arrow')) {
                 btn.style.display = 'none';
             }
         });
     }
 
-    hideSidebarBtn();
-    setTimeout(hideSidebarBtn, 500);
-    setTimeout(hideSidebarBtn, 2000);
-    new MutationObserver(hideSidebarBtn).observe(
+    fixAll();
+    setTimeout(fixAll, 300);
+    setTimeout(fixAll, 1000);
+    setTimeout(fixAll, 3000);
+    new MutationObserver(fixAll).observe(
         p.documentElement, { childList: true, subtree: true }
     );
 })();
