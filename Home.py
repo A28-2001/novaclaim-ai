@@ -102,8 +102,12 @@ st.markdown("""
 *, body, .stApp { font-family: 'Inter', sans-serif !important; }
 .stApp { background: #f7f8fc; color: #0f172a; }
 
-/* ── Hide sidebar collapse button (broken icon shows as text) ── */
-.stSidebarCollapseButton { display: none !important; }
+/* ── Load Material Symbols font so sidebar icon renders correctly ── */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');
+
+/* ── Hide sidebar collapse/expand button entirely ── */
+.stSidebarCollapseButton,
+.stSidebarCollapsedControl { display: none !important; }
 
 /* ── Sidebar: dark bg needs light text ── */
 [data-testid="stSidebar"] { background: #0f172a !important; border-right: none; }
