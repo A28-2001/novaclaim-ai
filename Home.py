@@ -1393,60 +1393,119 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("""
-<div style="background:white;border:1px solid #e2e8f0;border-radius:24px;overflow:hidden;
-            box-shadow:0 4px 24px rgba(0,0,0,0.06);margin-bottom:8px">
+<div style="border-radius:24px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.10);margin-bottom:8px">
 
-  <!-- Header -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:#f8fafc;border-bottom:1px solid #e2e8f0">
-    <div style="padding:16px 24px;font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#64748b">Task</div>
-    <div style="padding:16px 24px;font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#E24B4A;border-left:1px solid #e2e8f0">Manual Process</div>
-    <div style="padding:16px 24px;font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#1D9E75;border-left:1px solid #e2e8f0">NovaClaim AI</div>
+  <!-- Dark gradient header -->
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;
+              background:linear-gradient(135deg,#0f172a 0%,#1e293b 60%,#0f2a1f 100%)">
+    <div style="padding:20px 28px">
+      <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.14em;color:#64748b;margin-bottom:4px">Task</div>
+    </div>
+    <div style="padding:20px 28px;border-left:1px solid rgba(255,255,255,0.07)">
+      <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.14em;color:#fca5a5;margin-bottom:4px">✕ Manual Process</div>
+      <div style="font-size:0.78rem;color:#94a3b8;font-weight:500">Hours of work per document</div>
+    </div>
+    <div style="padding:20px 28px;border-left:1px solid rgba(255,255,255,0.07);
+                background:rgba(29,158,117,0.15)">
+      <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.14em;color:#6ee7b7;margin-bottom:4px">✓ NovaClaim AI</div>
+      <div style="font-size:0.78rem;color:#6ee7b7;font-weight:600;opacity:0.8">Seconds. Automatically.</div>
+    </div>
   </div>
 
   <!-- Row 1 -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9">
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Extract 17 fields</div>
-    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">30–45 min per document</div>
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">Under 8 seconds</div>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:white;border-bottom:1px solid #f1f5f9">
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:1.2rem">📋</span>
+      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Extract 17 fields</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
+      <span style="font-size:0.85rem;color:#94a3b8">30–45 min per document</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
+      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ Under 8 sec</span>
+    </div>
   </div>
 
   <!-- Row 2 -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9;background:#fafafa">
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Verify NPI number</div>
-    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">Manual CMS lookup</div>
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">Automatic via CMS API</div>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:#fafbfc;border-bottom:1px solid #f1f5f9">
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:1.2rem">🏥</span>
+      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Verify NPI number</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
+      <span style="font-size:0.85rem;color:#94a3b8">Manual CMS lookup</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
+      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ Auto via CMS API</span>
+    </div>
   </div>
 
   <!-- Row 3 -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9">
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Validate ICD-10 codes</div>
-    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">Manual NIH codebook lookup</div>
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">Automatic via NIH API</div>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:white;border-bottom:1px solid #f1f5f9">
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:1.2rem">🧬</span>
+      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Validate ICD-10 codes</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
+      <span style="font-size:0.85rem;color:#94a3b8">Manual NIH codebook</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
+      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ Auto via NIH API</span>
+    </div>
   </div>
 
   <!-- Row 4 -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9;background:#fafafa">
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Check PA requirement</div>
-    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">Call payer, check portal</div>
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">Instant CPT policy check</div>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:#fafbfc;border-bottom:1px solid #f1f5f9">
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:1.2rem">📞</span>
+      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Check PA requirement</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
+      <span style="font-size:0.85rem;color:#94a3b8">Call payer, check portal</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
+      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ Instant CPT check</span>
+    </div>
   </div>
 
   <!-- Row 5 -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9">
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Write appeal letter</div>
-    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">2–4 hours, attorney needed</div>
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">30 seconds, evidence-based</div>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:white;border-bottom:1px solid #f1f5f9">
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:1.2rem">⚖️</span>
+      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Write appeal letter</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
+      <span style="font-size:0.85rem;color:#94a3b8">2–4 hrs, attorney needed</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
+      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ 30 sec, AI-drafted</span>
+    </div>
   </div>
 
   <!-- Row 6 -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:#fafafa">
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Predict approval risk</div>
-    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">Experience-based guesswork</div>
-    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">0–100 AI risk score</div>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:#fafbfc;border-bottom:1px solid #f1f5f9">
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:1.2rem">🎯</span>
+      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Predict approval risk</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
+      <span style="font-size:0.85rem;color:#94a3b8">Experience-based guesswork</span>
+    </div>
+    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
+      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ 0–100 AI risk score</span>
+    </div>
+  </div>
+
+  <!-- Footer summary bar -->
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;
+              background:linear-gradient(135deg,#0f172a,#1e293b)">
+    <div style="padding:16px 28px;font-size:0.8rem;font-weight:700;color:#94a3b8">Total time per document</div>
+    <div style="padding:16px 28px;font-size:0.9rem;font-weight:900;color:#fca5a5;border-left:1px solid rgba(255,255,255,0.07)">3–6 hours</div>
+    <div style="padding:16px 28px;font-size:0.9rem;font-weight:900;color:#6ee7b7;border-left:1px solid rgba(255,255,255,0.07);background:rgba(29,158,117,0.15)">Under 60 seconds</div>
   </div>
 
 </div>
-<p style="text-align:center;font-size:0.78rem;color:#94a3b8;margin-top:10px">
+<p style="text-align:center;font-size:0.78rem;color:#94a3b8;margin-top:12px">
   NovaClaim AI handles every step that previously required manual work — in seconds, not hours.
 </p>
 """, unsafe_allow_html=True)
