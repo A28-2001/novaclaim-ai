@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 import os
 import smtplib
@@ -77,6 +78,37 @@ st.set_page_config(
 )
 
 init_db()
+
+# ── Force sidebar always open — hide collapse button via iframe JS ──────────────
+components.html("""
+<script>
+(function() {
+    function fix() {
+        var p = window.parent.document;
+        // Hide by data-testid (all known variants)
+        ['collapsedControl','stSidebarCollapsedControl','stSidebarCollapseButton']
+        .forEach(function(id) {
+            p.querySelectorAll('[data-testid="' + id + '"]')
+             .forEach(function(el) { el.style.display = 'none'; });
+        });
+        // Hide any button containing the broken icon text
+        p.querySelectorAll('button').forEach(function(btn) {
+            if (btn.innerText && btn.innerText.includes('keyboard_double_arrow')) {
+                btn.style.display = 'none';
+            }
+        });
+    }
+    fix();
+    setTimeout(fix, 300);
+    setTimeout(fix, 1000);
+    setTimeout(fix, 3000);
+    new MutationObserver(fix).observe(
+        window.parent.document.documentElement,
+        { childList: true, subtree: true }
+    );
+})();
+</script>
+""", height=0)
 
 @st.cache_data(ttl=300)
 def _live_hero_stats() -> dict:
@@ -328,28 +360,7 @@ div[data-testid="stFileUploaderLabel"] {
     .about-stat-row { flex-wrap: wrap; gap: 16px; }
 }
 </style>
-<script>
-(function() {
-    function removeCollapseBtn() {
-        var selectors = [
-            '[data-testid="collapsedControl"]',
-            '[data-testid="stSidebarCollapsedControl"]',
-            '[data-testid="stSidebarCollapseButton"]'
-        ];
-        selectors.forEach(function(sel) {
-            document.querySelectorAll(sel).forEach(function(el) {
-                el.style.display = 'none';
-            });
-        });
-    }
-    window.addEventListener('load', removeCollapseBtn);
-    setTimeout(removeCollapseBtn, 500);
-    setTimeout(removeCollapseBtn, 1500);
-    new MutationObserver(removeCollapseBtn).observe(
-        document.documentElement, { childList: true, subtree: true }
-    );
-})();
-</script>
+
 """, unsafe_allow_html=True)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
