@@ -79,32 +79,40 @@ st.set_page_config(
 
 init_db()
 
-# ── Force sidebar always open — hide collapse button via iframe JS ──────────────
+# ── Load Material Symbols font + hide sidebar collapse button ──────────────────
 components.html("""
 <script>
 (function() {
-    function fix() {
-        var p = window.parent.document;
-        // Hide by data-testid (all known variants)
+    var p = window.parent.document;
+
+    // 1. Inject Material Symbols Rounded font into parent document
+    if (!p.getElementById('nc-material-symbols')) {
+        var link = p.createElement('link');
+        link.id   = 'nc-material-symbols';
+        link.rel  = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block';
+        p.head.appendChild(link);
+    }
+
+    // 2. Hide sidebar collapse/expand button
+    function hideSidebarBtn() {
         ['collapsedControl','stSidebarCollapsedControl','stSidebarCollapseButton']
         .forEach(function(id) {
             p.querySelectorAll('[data-testid="' + id + '"]')
              .forEach(function(el) { el.style.display = 'none'; });
         });
-        // Hide any button containing the broken icon text
         p.querySelectorAll('button').forEach(function(btn) {
             if (btn.innerText && btn.innerText.includes('keyboard_double_arrow')) {
                 btn.style.display = 'none';
             }
         });
     }
-    fix();
-    setTimeout(fix, 300);
-    setTimeout(fix, 1000);
-    setTimeout(fix, 3000);
-    new MutationObserver(fix).observe(
-        window.parent.document.documentElement,
-        { childList: true, subtree: true }
+
+    hideSidebarBtn();
+    setTimeout(hideSidebarBtn, 500);
+    setTimeout(hideSidebarBtn, 2000);
+    new MutationObserver(hideSidebarBtn).observe(
+        p.documentElement, { childList: true, subtree: true }
     );
 })();
 </script>
