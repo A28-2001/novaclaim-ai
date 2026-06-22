@@ -106,8 +106,28 @@ st.markdown("""
 header[data-testid="stHeader"] { display: none !important; }
 .stAppDeployButton { display: none !important; }
 
-/* ── Force-hide file uploader label ── */
-div[data-testid="stFileUploader"] label { display: none !important; }
+/* ── Force-hide file uploader label — all Streamlit versions ── */
+div[data-testid="stFileUploader"] label,
+div[data-testid="stFileUploader"] > div:first-child > label,
+section[data-testid="stFileUploaderDropzoneInput"] + label,
+.stFileUploader label {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 0 !important;
+}
+
+/* ── Hide Streamlit header — all versions ── */
+header[data-testid="stHeader"],
+header[data-testid="stAppHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"] {
+    display: none !important;
+}
 
 /* ── Sidebar: dark bg needs light text ── */
 [data-testid="stSidebar"] { background: #0f172a !important; border-right: none; }
@@ -613,10 +633,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 uploaded_files = st.file_uploader(
-    "prior_auth_uploader",
+    "Select files",
     type=["pdf","txt"],
     accept_multiple_files=True,
-    label_visibility="hidden",
+    label_visibility="collapsed",
 )
 
 if not uploaded_files and not st.session_state.history:
