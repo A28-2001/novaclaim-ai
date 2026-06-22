@@ -102,12 +102,6 @@ st.markdown("""
 *, body, .stApp { font-family: 'Inter', sans-serif !important; }
 .stApp { background: #f7f8fc; color: #0f172a; }
 
-/* ── Load Material Symbols font so sidebar icon renders correctly ── */
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');
-
-/* ── Hide sidebar collapse/expand button entirely ── */
-.stSidebarCollapseButton,
-.stSidebarCollapsedControl { display: none !important; }
 
 /* ── Sidebar: dark bg needs light text ── */
 [data-testid="stSidebar"] { background: #0f172a !important; border-right: none; }
@@ -334,6 +328,28 @@ div[data-testid="stFileUploaderLabel"] {
     .about-stat-row { flex-wrap: wrap; gap: 16px; }
 }
 </style>
+<script>
+(function() {
+    function removeCollapseBtn() {
+        var selectors = [
+            '[data-testid="collapsedControl"]',
+            '[data-testid="stSidebarCollapsedControl"]',
+            '[data-testid="stSidebarCollapseButton"]'
+        ];
+        selectors.forEach(function(sel) {
+            document.querySelectorAll(sel).forEach(function(el) {
+                el.style.display = 'none';
+            });
+        });
+    }
+    window.addEventListener('load', removeCollapseBtn);
+    setTimeout(removeCollapseBtn, 500);
+    setTimeout(removeCollapseBtn, 1500);
+    new MutationObserver(removeCollapseBtn).observe(
+        document.documentElement, { childList: true, subtree: true }
+    );
+})();
+</script>
 """, unsafe_allow_html=True)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
