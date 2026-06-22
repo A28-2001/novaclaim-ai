@@ -604,13 +604,16 @@ if st.session_state.history:
     st.markdown("")
 
 # ── Upload zone ────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="upload-zone">
-  <div class="upload-icon">📂</div>
-  <div class="upload-title">Drop your prior auth document here</div>
-  <div class="upload-sub">PDF or TXT · Multiple files supported</div>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    '<div style="background:rgba(29,158,117,0.04);border:2px dashed #1D9E75;border-radius:20px;'
+    'padding:18px 24px 6px;margin-bottom:4px">'
+    '<div style="text-align:center;margin-bottom:8px">'
+    '<span style="font-size:2rem">📂</span><br>'
+    '<span style="font-size:1rem;font-weight:700;color:#0f172a">Drop your prior auth document here</span><br>'
+    '<span style="font-size:0.82rem;color:#334155">PDF or TXT · Multiple files supported</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
 
 uploaded_files = st.file_uploader(
     "Upload Prior Authorization Documents",
@@ -618,6 +621,8 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True,
     label_visibility="collapsed",
 )
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 if not uploaded_files and not st.session_state.history:
     st.markdown("""
@@ -1378,25 +1383,71 @@ for col, (num, title, desc) in zip([c1, c2, c3], steps):
         </div>
         """, unsafe_allow_html=True)
 
-# ── Video ──────────────────────────────────────────────────────────────────────
+# ── Before / After comparison ──────────────────────────────────────────────────
 st.markdown("""
 <div class="divider-wrap" style="margin-top:36px">
   <div class="divider-line"></div>
-  <div class="divider-label">See it in action</div>
+  <div class="divider-label">Manual vs AI</div>
   <div class="divider-line"></div>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("""
-<div style="border-radius:20px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 8px 32px rgba(0,0,0,0.08)">
-<iframe width="100%" height="400"
-  src="https://www.youtube.com/embed/axe_AOfVHYs"
-  title="Prior Authorization Explained"
-  frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
-</iframe>
+<div style="background:white;border:1px solid #e2e8f0;border-radius:24px;overflow:hidden;
+            box-shadow:0 4px 24px rgba(0,0,0,0.06);margin-bottom:8px">
+
+  <!-- Header -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:#f8fafc;border-bottom:1px solid #e2e8f0">
+    <div style="padding:16px 24px;font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#64748b">Task</div>
+    <div style="padding:16px 24px;font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#E24B4A;border-left:1px solid #e2e8f0">Manual Process</div>
+    <div style="padding:16px 24px;font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#1D9E75;border-left:1px solid #e2e8f0">NovaClaim AI</div>
+  </div>
+
+  <!-- Row 1 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9">
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Extract 17 fields</div>
+    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">30–45 min per document</div>
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">Under 8 seconds</div>
+  </div>
+
+  <!-- Row 2 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9;background:#fafafa">
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Verify NPI number</div>
+    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">Manual CMS lookup</div>
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">Automatic via CMS API</div>
+  </div>
+
+  <!-- Row 3 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9">
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Validate ICD-10 codes</div>
+    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">Manual NIH codebook lookup</div>
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">Automatic via NIH API</div>
+  </div>
+
+  <!-- Row 4 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9;background:#fafafa">
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Check PA requirement</div>
+    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">Call payer, check portal</div>
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">Instant CPT policy check</div>
+  </div>
+
+  <!-- Row 5 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f1f5f9">
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Write appeal letter</div>
+    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">2–4 hours, attorney needed</div>
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">30 seconds, evidence-based</div>
+  </div>
+
+  <!-- Row 6 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:#fafafa">
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:600;color:#0f172a">Predict approval risk</div>
+    <div style="padding:14px 24px;font-size:0.85rem;color:#64748b;border-left:1px solid #f1f5f9">Experience-based guesswork</div>
+    <div style="padding:14px 24px;font-size:0.85rem;font-weight:700;color:#1D9E75;border-left:1px solid #f1f5f9">0–100 AI risk score</div>
+  </div>
+
 </div>
 <p style="text-align:center;font-size:0.78rem;color:#94a3b8;margin-top:10px">
-  Prior authorization explained — why it matters and how AI is transforming the process
+  NovaClaim AI handles every step that previously required manual work — in seconds, not hours.
 </p>
 """, unsafe_allow_html=True)
 
@@ -1495,7 +1546,6 @@ with form_col:
         demo_msg = st.text_area("Tell me about your use case *", placeholder="E.g., we process 400 prior auths per month manually and want to automate extraction and validation…", height=110)
         submitted = st.form_submit_button("Send Message →", type="primary", use_container_width=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)
 
 if submitted:
     if not (demo_name and demo_email and demo_msg):
