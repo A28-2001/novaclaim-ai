@@ -604,25 +604,11 @@ if st.session_state.history:
     st.markdown("")
 
 # ── Upload zone ────────────────────────────────────────────────────────────────
-st.markdown(
-    '<div style="background:rgba(29,158,117,0.04);border:2px dashed #1D9E75;border-radius:20px;'
-    'padding:18px 24px 6px;margin-bottom:4px">'
-    '<div style="text-align:center;margin-bottom:8px">'
-    '<span style="font-size:2rem">📂</span><br>'
-    '<span style="font-size:1rem;font-weight:700;color:#0f172a">Drop your prior auth document here</span><br>'
-    '<span style="font-size:0.82rem;color:#334155">PDF or TXT · Multiple files supported</span>'
-    '</div>',
-    unsafe_allow_html=True,
-)
-
 uploaded_files = st.file_uploader(
-    "Upload Prior Authorization Documents",
+    "📂  Drop your prior auth document here — PDF or TXT · Multiple files supported",
     type=["pdf","txt"],
     accept_multiple_files=True,
-    label_visibility="collapsed",
 )
-
-st.markdown('</div>', unsafe_allow_html=True)
 
 if not uploaded_files and not st.session_state.history:
     st.markdown("""
