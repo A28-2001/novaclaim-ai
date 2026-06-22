@@ -106,9 +106,6 @@ st.markdown("""
 header[data-testid="stHeader"] { display: none !important; }
 .stAppDeployButton { display: none !important; }
 
-/* ── Hide Streamlit header (keyboard_double icon) ── */
-.stAppHeader, .stToolbar { display: none !important; }
-.stApp > header { display: none !important; }
 
 /* ── Sidebar: dark bg needs light text ── */
 [data-testid="stSidebar"] { background: #0f172a !important; border-right: none; }
