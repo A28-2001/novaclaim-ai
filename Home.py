@@ -102,9 +102,6 @@ st.markdown("""
 *, body, .stApp { font-family: 'Inter', sans-serif !important; }
 .stApp { background: #f7f8fc; color: #0f172a; }
 
-/* ── Hide Streamlit header bar (removes keyboard_double icon) ── */
-header[data-testid="stHeader"] { display: none !important; }
-.stAppDeployButton { display: none !important; }
 
 
 /* ── Sidebar: dark bg needs light text ── */
