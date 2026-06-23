@@ -149,7 +149,7 @@ st.markdown("""
 .material-symbols-rounded { display: none !important; }
 
 
-/* ── Sidebar: dark bg needs light text ── */
+/* ── Sidebar: always visible on desktop, dark bg ── */
 [data-testid="stSidebar"] { background: #0f172a !important; border-right: none; }
 [data-testid="stSidebar"] * { color: #e2e8f0 !important; }
 [data-testid="stSidebar"] .stButton button {
@@ -159,6 +159,21 @@ st.markdown("""
 [data-testid="stSidebar"] .stButton button:hover { background: rgba(29,158,117,0.25) !important; }
 [data-testid="stSidebarNav"] a { color: #94a3b8 !important; }
 [data-testid="stSidebarNav"] a:hover, [data-testid="stSidebarNav"] a[aria-selected="true"] { color: #1D9E75 !important; }
+
+/* Force sidebar permanently open on desktop — hide both collapse and expand buttons */
+@media (min-width: 769px) {
+    [data-testid="stSidebar"] {
+        display: block !important;
+        visibility: visible !important;
+        transform: translateX(0px) !important;
+        min-width: 244px !important;
+    }
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"] {
+        display: none !important;
+    }
+}
 
 /* ── NC Logo ── */
 .nc-mark {
