@@ -218,6 +218,21 @@ st.markdown("""
     padding: 7px 16px; border-radius: 999px;
 }
 
+/* ── Mobile nav bar (hidden on desktop) ── */
+.mobile-nav { display: none; }
+@media (max-width: 768px) {
+    .feature-pill { width: 100%; justify-content: center; }
+    .mobile-nav {
+        display: flex; gap: 10px; margin: 0 0 18px 0;
+    }
+    .mobile-nav a {
+        flex: 1; text-align: center; padding: 10px 8px;
+        background: rgba(29,158,117,0.12); border: 1px solid rgba(29,158,117,0.3);
+        color: #1D9E75 !important; font-size: 0.82rem; font-weight: 700;
+        border-radius: 12px; text-decoration: none;
+    }
+}
+
 /* ── Explainer card ── */
 .explainer-card {
     background: white; border: 1px solid #e2e8f0;
@@ -595,6 +610,14 @@ st.markdown(f"""
       <div style="font-size:0.75rem;color:#64748b;margin-top:4px;font-weight:500">AI Implementation Analyst</div>
     </div>
   </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Mobile nav (Analytics + History links, hidden on desktop) ──────────────────
+st.markdown("""
+<div class="mobile-nav">
+  <a href="/1_📊_Analytics" target="_self">📊 Analytics</a>
+  <a href="/2_📁_History" target="_self">📁 History</a>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1425,7 +1448,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("""
-<div style="border-radius:24px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.10);margin-bottom:8px">
+<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+<div style="min-width:480px;border-radius:24px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.10);margin-bottom:8px">
 
   <!-- Dark gradient header -->
   <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;
@@ -1536,6 +1560,7 @@ st.markdown("""
     <div style="padding:16px 28px;font-size:0.9rem;font-weight:900;color:#6ee7b7;border-left:1px solid rgba(255,255,255,0.07);background:rgba(29,158,117,0.15)">Under 60 seconds</div>
   </div>
 
+</div>
 </div>
 <p style="text-align:center;font-size:0.78rem;color:#94a3b8;margin-top:12px">
   NovaClaim AI handles every step that previously required manual work — in seconds, not hours.
