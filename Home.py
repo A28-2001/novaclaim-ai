@@ -88,15 +88,8 @@ components.html("""
     var ICON_PATTERN = /^[a-z][a-z_]{3,}$/;  // matches "upload", "arrow_right", etc.
 
     function fixAll() {
-        // 1. Hide sidebar collapse button
-        ['collapsedControl','stSidebarCollapsedControl','stSidebarCollapseButton']
-        .forEach(function(id) {
-            p.querySelectorAll('[data-testid="' + id + '"]')
-             .forEach(function(el) { el.style.display = 'none'; });
-        });
-
-        // 2. Hide any span/element whose FULL text is a Material Symbols icon name
-        //    (all lowercase + underscores, no spaces — e.g. "upload", "arrow_right")
+        // 1. Hide broken icon text spans (Material Symbols not loading)
+        //    Pattern: all lowercase + underscores only — e.g. "upload", "arrow_right"
         p.querySelectorAll('span, i').forEach(function(el) {
             var t = (el.textContent || '').trim();
             if (ICON_PATTERN.test(t)) {
@@ -104,10 +97,15 @@ components.html("""
             }
         });
 
-        // 3. Also hide buttons containing the sidebar arrow text
+        // 2. Hide buttons whose visible text is ONLY a broken icon name
+        //    (does NOT hide the collapse/expand sidebar button itself)
         p.querySelectorAll('button').forEach(function(btn) {
-            if ((btn.innerText || '').includes('keyboard_double_arrow')) {
-                btn.style.display = 'none';
+            var t = (btn.innerText || '').replace(/\s/g, '').toLowerCase();
+            if (ICON_PATTERN.test(t) || t === 'uploadupload') {
+                btn.style.visibility = 'hidden';
+                btn.style.pointerEvents = 'none';
+                btn.style.width = '0';
+                btn.style.padding = '0';
             }
         });
     }
