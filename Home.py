@@ -271,9 +271,8 @@ st.markdown("""
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
-/* ── Upload zone — force-hide Streamlit file uploader label ── */
-div[data-testid="stFileUploader"] label,
-div[data-testid="stFileUploaderLabel"] {
+/* ── Upload zone — hide only the outer custom label, not the Browse button ── */
+div[data-testid="stFileUploader"] > label {
     display: none !important;
 }
 
