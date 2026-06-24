@@ -1694,7 +1694,7 @@ if submitted:
             st.markdown(
                 f'<div style="background:#f0fdf4;border:1.5px solid #86efac;border-left:4px solid #1D9E75;'
                 f'border-radius:12px;padding:16px 20px;color:#166534;font-weight:600;font-size:0.9rem;margin-top:8px">'
-                f'✓ Message sent! Thanks <strong>{demo_name}</strong> — I\'ll be in touch at {demo_email} within 24 hours.</div>',
+                f'✓ Got it, <strong>{demo_name}</strong>! Your message has been received. I\'ll review it and get back to you at <strong>{demo_email}</strong> within 24 hours.</div>',
                 unsafe_allow_html=True,
             )
         elif status == "not_configured":
