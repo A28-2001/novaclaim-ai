@@ -98,8 +98,9 @@ components.html("""
         });
 
         // 2. Hide buttons whose visible text is ONLY a broken icon name
-        //    (does NOT hide the collapse/expand sidebar button itself)
+        //    (does NOT hide the collapse/expand sidebar button or file uploader button)
         p.querySelectorAll('button').forEach(function(btn) {
+            if (btn.closest('[data-testid="stFileUploaderDropzone"]')) return;
             var t = (btn.innerText || '').replace(/\s/g, '').toLowerCase();
             if (ICON_PATTERN.test(t) || t === 'uploadupload') {
                 btn.style.visibility = 'hidden';
@@ -274,6 +275,13 @@ st.markdown("""
 /* ── Upload zone — hide only the outer custom label, not the Browse button ── */
 div[data-testid="stFileUploader"] > label {
     display: none !important;
+}
+/* Force Browse files button always visible */
+div[data-testid="stFileUploaderDropzone"] button {
+    visibility: visible !important;
+    width: auto !important;
+    padding: 0.4rem 1rem !important;
+    pointer-events: auto !important;
 }
 
 /* ── Status badges ── */
