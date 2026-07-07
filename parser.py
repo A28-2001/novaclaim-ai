@@ -1,6 +1,25 @@
 from groq import Groq
 import json
 import os
+import time
+
+
+def _groq_with_retry(client, max_retries: int = 4, **kwargs):
+    """
+    Call client.chat.completions.create with exponential backoff on rate limit errors.
+    Retries up to max_retries times: waits 2s, 4s, 8s, 16s between attempts.
+    """
+    for attempt in range(max_retries):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
+            err = str(e).lower()
+            is_rate_limit = "rate limit" in err or "429" in err or "too many" in err
+            if is_rate_limit and attempt < max_retries - 1:
+                wait = 2 ** (attempt + 1)  # 2, 4, 8, 16 seconds
+                time.sleep(wait)
+            else:
+                raise
 
 
 def parse_prior_auth(document_text: str) -> dict:
@@ -86,7 +105,8 @@ Document:
 
 Return only the JSON object. No explanation, no markdown, no extra text."""
 
-    response = client.chat.completions.create(
+    response = _groq_with_retry(
+        client,
         model="llama-3.1-8b-instant",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=2048,
@@ -129,7 +149,8 @@ Diagnosis: {diagnosis or 'Not specified'}
 Format your response as exactly 3 numbered points. Each point should be 2-3 sentences.
 Be specific — avoid generic statements."""
 
-    response = client.chat.completions.create(
+    response = _groq_with_retry(
+        client,
         model="llama-3.1-8b-instant",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=600,
