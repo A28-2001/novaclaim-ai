@@ -692,12 +692,84 @@ if st.session_state.history:
     st.dataframe(rows, use_container_width=True, hide_index=True)
     st.markdown("")
 
+# ── Shared processing pipeline ─────────────────────────────────────────────────
+def _process_document(filename: str, doc_text: str) -> dict | None:
+    """Parse + validate + persist + run all agents for one document. Returns an entry dict."""
+    try:
+        result = parse_prior_auth(doc_text)
+    except Exception:
+        return None
+    issues    = validate_fields(result)
+    record_id = save_record(filename, result, issues)
+    try:
+        agent_res = _agent.validate_all(result)
+        save_agent_results(record_id, agent_res)
+    except Exception:
+        agent_res = None
+    try:
+        coverage_res = _coverage.check_all(result)
+    except Exception:
+        coverage_res = None
+    try:
+        risk_res = _risk.score(result, agent_res, coverage_res, issues)
+    except Exception:
+        risk_res = None
+    return {
+        "filename":     filename,
+        "result":       result,
+        "text":         doc_text,
+        "timestamp":    datetime.now().strftime("%H:%M:%S"),
+        "record_id":    record_id,
+        "agent_res":    agent_res,
+        "coverage_res": coverage_res,
+        "risk_res":     risk_res,
+    }
+
+# Curated sample documents shown as one-click "Try a sample" buttons
+SAMPLE_DOCS = [
+    ("✅  Approved · Insulin",    "sample_approved_insulin.txt",   "#1D9E75", "#f0fdf4", "#86efac"),
+    ("❌  Denied · MRI",          "sample_denied_mri.txt",         "#E24B4A", "#fef2f2", "#fca5a5"),
+    ("⏳  Pending · Chemotherapy","sample_pending_chemo.txt",      "#BA7517", "#fffbeb", "#fcd34d"),
+]
+
+def _load_sample_text(fname: str) -> str | None:
+    try:
+        with open(os.path.join(os.path.dirname(__file__), fname), encoding="utf-8") as fh:
+            return fh.read()
+    except Exception:
+        return None
+
 # ── Upload zone ────────────────────────────────────────────────────────────────
 uploaded_files = st.file_uploader(
     "📂  Drop your prior auth document here — PDF or TXT · Multiple files supported",
     type=["pdf","txt"],
     accept_multiple_files=True,
 )
+
+# ── Try a sample (no upload needed) ────────────────────────────────────────────
+st.markdown(
+    '<div style="display:flex;align-items:center;gap:10px;margin:16px 0 10px">'
+    '<div style="flex:1;height:1px;background:#e2e8f0"></div>'
+    '<span style="font-size:0.72rem;font-weight:700;text-transform:uppercase;'
+    'letter-spacing:0.1em;color:#64748b">No document handy? Try a sample</span>'
+    '<div style="flex:1;height:1px;background:#e2e8f0"></div></div>',
+    unsafe_allow_html=True,
+)
+_sc = st.columns(len(SAMPLE_DOCS))
+for _i, (_label, _fname, _fg, _bg, _bdr) in enumerate(SAMPLE_DOCS):
+    with _sc[_i]:
+        if st.button(_label, key=f"sample_{_fname}", use_container_width=True):
+            _txt = _load_sample_text(_fname)
+            if not _txt:
+                st.error(f"Could not load {_fname}")
+            else:
+                with st.spinner(f"Parsing sample & running 4 agents…"):
+                    _entry = _process_document(_fname, _txt)
+                if _entry:
+                    st.session_state.history.append(_entry)
+                    st.rerun()
+                else:
+                    st.error("Sample failed to parse — check your Groq API key.")
 
 if not uploaded_files and not st.session_state.history:
     st.markdown("""
@@ -727,45 +799,18 @@ if uploaded_files:
                 if not doc_text:
                     st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 16px;color:#991b1b;font-weight:600;font-size:0.85rem">✕ Could not extract text from <strong>{uf.name}</strong></div>', unsafe_allow_html=True)
                     continue
-                result = parse_prior_auth(doc_text)
             except Exception as e:
-                st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 16px;color:#991b1b;font-weight:600;font-size:0.85rem">✕ Failed to parse <strong>{uf.name}</strong>: {e}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 16px;color:#991b1b;font-weight:600;font-size:0.85rem">✕ Could not read <strong>{uf.name}</strong>: {e}</div>', unsafe_allow_html=True)
                 continue
-            issues    = validate_fields(result)
-            record_id = save_record(uf.name, result, issues)
 
-            # Auto-run agents immediately after parsing
             prog.progress(
                 (idx + 0.6) / len(uploaded_files),
                 text=f"Verifying {uf.name} against external databases…",
             )
-            try:
-                agent_res = _agent.validate_all(result)
-                save_agent_results(record_id, agent_res)
-            except Exception:
-                agent_res = None
-
-            try:
-                coverage_res = _coverage.check_all(result)
-            except Exception:
-                coverage_res = None
-
-            # Risk score — runs instantly, no API calls
-            try:
-                risk_res = _risk.score(result, agent_res, coverage_res, issues)
-            except Exception:
-                risk_res = None
-
-            entry = {
-                "filename":     uf.name,
-                "result":       result,
-                "text":         doc_text,
-                "timestamp":    datetime.now().strftime("%H:%M:%S"),
-                "record_id":    record_id,
-                "agent_res":    agent_res,
-                "coverage_res": coverage_res,
-                "risk_res":     risk_res,
-            }
+            entry = _process_document(uf.name, doc_text)
+            if not entry:
+                st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 16px;color:#991b1b;font-weight:600;font-size:0.85rem">✕ Failed to parse <strong>{uf.name}</strong></div>', unsafe_allow_html=True)
+                continue
             st.session_state.history.append(entry)
             newly.append(entry)
         prog.progress(1.0, text="Done!")
