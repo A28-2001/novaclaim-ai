@@ -1,0 +1,63 @@
+name: Keep NovaClaim AI awake
+
+# Streamlit Community Cloud sleeps an app after ~12h of no real browser traffic.
+# A plain HTTP ping does NOT count — Streamlit only registers a real browser
+# session (WebSocket). This workflow loads the app with a real headless browser
+# (Playwright) on a schedule and clicks the "wake up" button if it appears,
+# which resets the sleep timer and keeps the demo live for recruiters.
+
+on:
+  schedule:
+    # Runs every 6 hours (UTC). GitHub cron is best-effort, not exact.
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}   # lets you trigger it manually from the Actions tab
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Playwright (Chromium)
+        run: npm init -y && npm i playwright && npx playwright install --with-deps chromium
+
+      - name: Visit app and wake it if asleep
+        env:
+          APP_URL: "https://novaclaim-ai-geapnrrp2vuegxj4jm5wre.streamlit.app/"
+        run: |
+          cat > wake.js <<'EOF'
+          const { chromium } = require("playwright");
+
+          (async () => {
+            const url = process.env.APP_URL;
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            console.log("Opening", url);
+            await page.goto(url, { waitUntil: "networkidle", timeout: 90000 });
+
+            // If the app is asleep, click the "Yes, get this app back up!" button.
+            try {
+              const btn = page.getByText(/get this app back up/i);
+              if (await btn.isVisible({ timeout: 8000 })) {
+                console.log("App was asleep — clicking wake button.");
+                await btn.click();
+                // Give Streamlit time to spin the container back up.
+                await page.waitForTimeout(60000);
+              } else {
+                console.log("App already awake.");
+              }
+            } catch (e) {
+              console.log("No wake button found — app is awake.");
+            }
+
+            // Hold a real session open briefly so Streamlit registers the visit.
+            await page.waitForTimeout(15000);
+            await browser.close();
+            console.log("Done.");
+          })().catch((e) => { console.error(e); process.exit(1); });
+          EOF
+          node wake.js
