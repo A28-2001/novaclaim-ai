@@ -150,15 +150,54 @@ total   = stats.get("total", 0) or 0
 
 if not total:
     st.markdown("""
-    <div style="text-align:center;padding:60px 20px;border:2px dashed #e2e8f0;
+    <div style="text-align:center;padding:48px 24px;border:2px dashed #cbd5e1;
     border-radius:20px;background:white;margin-top:12px">
-      <div style="font-size:2.5rem;margin-bottom:12px">📭</div>
-      <div style="font-size:1rem;font-weight:700;color:#0f172a;margin-bottom:6px">No data yet</div>
-      <div style="font-size:0.83rem;color:#475569">
-        Go to Home and parse some prior auth documents first.</div>
+      <div style="font-size:2.5rem;margin-bottom:12px">📊</div>
+      <div style="font-size:1.15rem;font-weight:800;color:#0f172a;margin-bottom:8px">
+        This dashboard is empty because nothing has been parsed yet</div>
+      <div style="font-size:0.87rem;color:#475569;line-height:1.7;max-width:520px;margin:0 auto">
+        The charts below track approval rates, payor performance, denial reasons and
+        processing trends across every document this app has analyzed.<br><br>
+        Load a demo dataset to see it working, or head to
+        <strong>Home</strong> and parse a document of your own.
+      </div>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+    _c1, _c2, _c3 = st.columns([1, 1.4, 1])
+    with _c2:
+        if st.button("📈  Load 26 sample documents", type="primary", use_container_width=True):
+            from demo_data import seed_demo_data
+            with st.spinner("Populating dashboard…"):
+                n = seed_demo_data()
+            st.cache_data.clear()
+            st.success(f"Loaded {n} sample documents.")
+            st.rerun()
+        st.caption(
+            "Sample records are clearly labelled and can be cleared at any time "
+            "from the sidebar."
+        )
     st.stop()
+
+# ── Demo-data banner + clear control ───────────────────────────────────────────
+from demo_data import demo_records_present, clear_demo_data
+if demo_records_present():
+    _b1, _b2 = st.columns([4, 1])
+    with _b1:
+        st.markdown(
+            '<div style="background:#fffbeb;border:1px solid #fcd34d;border-left:4px solid #BA7517;'
+            'border-radius:10px;padding:9px 14px;font-size:0.8rem;color:#92400e">'
+            '<strong>Demo data loaded.</strong> These charts include sample records so you can '
+            'see the dashboard populated. Your own parsed documents appear here too.</div>',
+            unsafe_allow_html=True,
+        )
+    with _b2:
+        if st.button("Clear demo data", use_container_width=True):
+            n = clear_demo_data()
+            st.cache_data.clear()
+            st.rerun()
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
 approved   = stats.get("approved",   0) or 0
 denied     = stats.get("denied",     0) or 0
