@@ -441,6 +441,28 @@ FIELD_TOOLTIPS = {
     "notes":                 "Additional clinical notes or caveats from the document",
 }
 
+# Plain-English one-liners shown under jargon fields so non-healthcare
+# visitors understand what each code actually means.
+PLAIN_ENGLISH = {
+    "provider_npi":        "The doctor's national license number — we check it's real against the government registry.",
+    "diagnosis_code":      "ICD-10 — the standard code insurers use to identify a diagnosis.",
+    "cpt_code":            "CPT — the standard code for the procedure or treatment being requested.",
+    "authorization_number":"The reference number the insurer assigns once a request is approved.",
+    "member_id":           "The patient's insurance policy number.",
+    "payor":               "The insurance company deciding whether to approve this.",
+    "denial_reason":       "Why the insurer rejected the request — the basis for any appeal.",
+}
+
+def plain_note(key: str) -> str:
+    """Return a small grey explanatory line for a jargon field, or empty string."""
+    txt = PLAIN_ENGLISH.get(key)
+    if not txt:
+        return ""
+    return (
+        f'<div style="font-size:0.72rem;color:#64748b;line-height:1.5;'
+        f'margin-top:2px;font-style:italic">{txt}</div>'
+    )
+
 NC_LOGO_HTML = """
 <div class="nc-logo-wrap">
   <div class="nc-mark">
@@ -503,7 +525,7 @@ def render_field_card(label, key, value, conf_level=None, code_val=None, code_ty
         f'<div class="field-card" title="{tooltip}">'
         f'  <div class="field-card-inner">'
         f'    <div class="field-card-header"><span class="field-card-label">{label}</span>{badge}</div>'
-        f'    {val_html}{code_html}'
+        f'    {val_html}{code_html}{plain_note(key)}'
         f'  </div>'
         f'  <div class="field-card-bar"><div class="field-card-bar-fill" style="width:{pct}%;background:{bar_col}"></div></div>'
         f'</div>',
@@ -515,13 +537,173 @@ def render_field_row(label, key, value, conf_level=None):
     val_str  = list_or_str(value)
     val_html = f'<span class="field-value">{val_str}</span>' if val_str else '<span class="field-value missing">—</span>'
     tooltip  = FIELD_TOOLTIPS.get(key, "")
+    note = plain_note(key)
     st.markdown(
         f'<div class="field-row" title="{tooltip}">'
         f'  <span class="field-label">{label}</span>'
-        f'  {val_html}'
+        f'  <span style="flex:1">{val_html}{note}</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
+
+def agent_story(agent_res, coverage_res) -> str:
+    """
+    Explain, in plain sentences, what each of the 4 agents actually checked
+    and what it found. Turns abstract badges into something a person can picture.
+    """
+    OK   = ("verified", "found", "valid")
+    BAD  = ("not_found", "invalid")
+
+    def card(num, color, title, body):
+        return (
+            f'<div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #f1f5f9">'
+            f'<div style="background:{color};color:white;border-radius:9px;min-width:28px;height:28px;'
+            f'display:flex;align-items:center;justify-content:center;font-weight:900;'
+            f'font-size:0.78rem;flex-shrink:0">{num}</div>'
+            f'<div><div style="font-weight:800;color:#0f172a;font-size:0.86rem;margin-bottom:3px">{title}</div>'
+            f'<div style="font-size:0.82rem;color:#475569;line-height:1.65">{body}</div></div></div>'
+        )
+
+    out = ""
+    a = agent_res or {}
+
+    # Agent 1 — NPI
+    npi = a.get("npi_verification") or {}
+    s   = npi.get("status")
+    if s in OK:
+        who = npi.get("registry_name") or "this provider"
+        spec = npi.get("registry_specialty")
+        body = (f"Took the doctor's license number off the form and looked it up in the "
+                f"US government's official CMS provider registry. It's real, and it belongs to "
+                f"<strong>{who}</strong>"
+                + (f", a {spec} specialist." if spec else "."))
+    elif s in BAD:
+        body = ("Looked up the doctor's license number in the US government's CMS registry "
+                "and <strong>could not find it</strong>. That's exactly the kind of error that "
+                "gets a claim rejected.")
+    else:
+        body = ("Checks the doctor's license number against the US government's official "
+                "CMS provider registry. No number was found on this document to check.")
+    out += card(1, "#1D9E75", "Is this doctor real?", body)
+
+    # Agent 2 — ICD-10
+    icd  = a.get("icd10_verification") or []
+    good = [c for c in icd if c.get("status") in OK]
+    bad  = [c for c in icd if c.get("status") in BAD]
+    if good and not bad:
+        body = (f"Checked {len(good)} diagnosis code{'s' if len(good) > 1 else ''} against the "
+                f"National Institutes of Health database. All valid and correctly formatted.")
+    elif bad:
+        body = (f"Checked the diagnosis codes against the NIH database — "
+                f"<strong>{len(bad)} didn't match a real code</strong>. Invalid codes are one of "
+                f"the most common reasons claims get denied.")
+    else:
+        body = ("Validates every diagnosis code against the National Institutes of Health "
+                "database. No codes were found on this document.")
+    out += card(2, "#4f46e5", "Are the diagnosis codes valid?", body)
+
+    # Agent 3 — FDA drug
+    drug = a.get("drug_verification") or {}
+    s    = drug.get("status")
+    if s in OK:
+        nm = drug.get("brand_name") or drug.get("generic_name") or "the requested drug"
+        body = (f"Searched the FDA's official drug database and confirmed <strong>{nm}</strong> "
+                f"is a real, approved medication.")
+    elif s in BAD:
+        body = ("Searched the FDA's drug database and <strong>couldn't find a match</strong> for "
+                "the requested medication — worth a second look before submitting.")
+    else:
+        body = ("Cross-references the requested medication against the FDA's official drug "
+                "database. No drug was identified on this document.")
+    out += card(3, "#06b6d4", "Is this a real, FDA-approved drug?", body)
+
+    # Agent 4 — CPT coverage
+    cov = (coverage_res or {}).get("cpt_coverage") or []
+    if cov:
+        req = [c for c in cov if c.get("status") in ("required", "likely_required")]
+        if req:
+            body = (f"Looked up the procedure code and confirmed this treatment "
+                    f"<strong>does require prior approval</strong> from the insurer — so this "
+                    f"paperwork is genuinely necessary.")
+        else:
+            body = ("Looked up the procedure code against payer coverage rules to determine "
+                    "whether prior approval is even required for this treatment.")
+    else:
+        body = ("Looks up the procedure code to determine whether this treatment actually "
+                "requires prior approval. No procedure code was found on this document.")
+    out += card(4, "#BA7517", "Does this even need prior approval?", body)
+
+    return out
+
+
+def human_summary(result, agent_res, risk_res, issues, score) -> str:
+    """
+    One plain-English paragraph explaining, to a non-healthcare reader,
+    exactly what the app just did to this document.
+    """
+    n_found = sum(1 for f in REQUIRED_FIELDS if result.get(f))
+    n_total = len(REQUIRED_FIELDS)
+
+    parts = [
+        f"We read this document and pulled out <strong>{n_found} of {n_total}</strong> "
+        f"required details automatically."
+    ]
+
+    # What the agents confirmed, in human terms
+    checks = []
+    if agent_res:
+        npi_v = agent_res.get("npi_verification") or {}
+        if npi_v.get("status") in ("verified", "found", "valid"):
+            name = npi_v.get("registry_name")
+            checks.append(
+                f"confirmed the doctor is a real, licensed provider"
+                + (f" ({name})" if name else "")
+                + " in the government's CMS registry"
+            )
+        elif npi_v.get("status") in ("not_found", "invalid"):
+            checks.append("could <strong>not</strong> confirm the doctor's license number — that's a red flag")
+
+        icd_v = agent_res.get("icd10_verification") or []
+        ok_icd = sum(1 for c in icd_v if c.get("status") in ("valid", "found", "verified"))
+        if ok_icd:
+            checks.append(f"verified {ok_icd} diagnosis code{'s' if ok_icd > 1 else ''} against the NIH database")
+
+        drug_v = agent_res.get("drug_verification") or {}
+        if drug_v.get("status") in ("found", "verified", "valid"):
+            checks.append("matched the requested drug to an official FDA record")
+
+    if checks:
+        parts.append("Our AI agents then " + ", ".join(checks) + ".")
+
+    # Risk, explained without jargon
+    if risk_res:
+        lvl = str(risk_res.get("level", "")).lower()
+        sc  = risk_res.get("score")
+        if "low" in lvl:
+            parts.append(
+                f"Based on how complete and consistent it is, this request looks "
+                f"<strong>likely to be approved</strong> (risk score {sc}/100)."
+            )
+        elif "critical" in lvl or "high" in lvl:
+            parts.append(
+                f"Because key information is missing or inconsistent, this request is "
+                f"<strong>at real risk of being denied</strong> (risk score {sc}/100) — "
+                f"worth fixing before submitting."
+            )
+        else:
+            parts.append(
+                f"It sits in the middle on denial risk (score {sc}/100) — "
+                f"a few gaps are worth closing before submitting."
+            )
+
+    n_err = sum(1 for i in issues if i.get("severity") == "error")
+    if n_err:
+        parts.append(
+            f"We also flagged <strong>{n_err} problem{'s' if n_err > 1 else ''}</strong> "
+            f"that a human reviewer would otherwise have to catch by hand."
+        )
+
+    return " ".join(parts)
 
 # ── Session state ──────────────────────────────────────────────────────────────
 if "history"             not in st.session_state: st.session_state.history = []
@@ -739,6 +921,47 @@ def _load_sample_text(fname: str) -> str | None:
     except Exception:
         return None
 
+# ── 3-step walkthrough (plain English, sits directly above the uploader) ───────
+st.markdown("""
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:8px 0 18px">
+  <div style="background:white;border:1px solid #e2e8f0;border-top:3px solid #1D9E75;
+              border-radius:14px;padding:16px 18px;box-shadow:0 2px 6px rgba(0,0,0,0.04)">
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+      <div style="background:#1D9E75;color:white;border-radius:8px;width:24px;height:24px;
+                  display:flex;align-items:center;justify-content:center;font-weight:900;font-size:0.8rem">1</div>
+      <div style="font-weight:800;color:#0f172a;font-size:0.88rem">Drop in a document</div>
+    </div>
+    <div style="font-size:0.8rem;color:#475569;line-height:1.6">
+      Any prior authorization form — a messy scanned PDF or plain text. No formatting required.
+    </div>
+  </div>
+  <div style="background:white;border:1px solid #e2e8f0;border-top:3px solid #4f46e5;
+              border-radius:14px;padding:16px 18px;box-shadow:0 2px 6px rgba(0,0,0,0.04)">
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+      <div style="background:#4f46e5;color:white;border-radius:8px;width:24px;height:24px;
+                  display:flex;align-items:center;justify-content:center;font-weight:900;font-size:0.8rem">2</div>
+      <div style="font-weight:800;color:#0f172a;font-size:0.88rem">AI reads and checks it</div>
+    </div>
+    <div style="font-size:0.8rem;color:#475569;line-height:1.6">
+      Pulls out 12 key details, then 4 AI agents verify them against real government
+      and FDA databases.
+    </div>
+  </div>
+  <div style="background:white;border:1px solid #e2e8f0;border-top:3px solid #BA7517;
+              border-radius:14px;padding:16px 18px;box-shadow:0 2px 6px rgba(0,0,0,0.04)">
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+      <div style="background:#BA7517;color:white;border-radius:8px;width:24px;height:24px;
+                  display:flex;align-items:center;justify-content:center;font-weight:900;font-size:0.8rem">3</div>
+      <div style="font-weight:800;color:#0f172a;font-size:0.88rem">See the denial risk</div>
+    </div>
+    <div style="font-size:0.8rem;color:#475569;line-height:1.6">
+      A machine learning model scores how likely this claim is to be rejected —
+      before anyone submits it.
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
 # ── Upload zone ────────────────────────────────────────────────────────────────
 uploaded_files = st.file_uploader(
     "📂  Drop your prior auth document here — PDF or TXT · Multiple files supported",
@@ -945,6 +1168,19 @@ if st.session_state.history:
                 unsafe_allow_html=True,
             )
 
+            # ── Plain-English "what just happened" card ────────────────────────
+            st.markdown(
+                f'<div style="background:linear-gradient(135deg,#f8fafc,#f0fdf4);'
+                f'border:1px solid #cbd5e1;border-left:4px solid #4f46e5;'
+                f'border-radius:14px;padding:18px 22px;margin-bottom:16px">'
+                f'<div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;'
+                f'letter-spacing:0.12em;color:#4f46e5;margin-bottom:8px">In plain English</div>'
+                f'<div style="font-size:0.9rem;color:#1e293b;line-height:1.8">'
+                f'{human_summary(result, agent_res, risk_res, issues, score)}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
             if errors or warnings:
                 chips  = "".join(f'<span style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:4px 10px;font-size:0.78rem;font-weight:600;margin:2px;display:inline-block">✕ {i["message"]}</span>' for i in errors)
                 chips += "".join(f'<span style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:8px;padding:4px 10px;font-size:0.78rem;font-weight:600;margin:2px;display:inline-block">⚠ {i["message"]}</span>' for i in warnings)
@@ -963,7 +1199,7 @@ if st.session_state.history:
                 "👤 Patient & Insurance",
                 "🩺 Clinical",
                 "📋 Authorization",
-                "📄 Document",
+                "📄 Before / After",
                 "🔬 Agent Verified",
                 "📋 Coverage",
                 "🎯 Risk Score",
@@ -1121,13 +1357,77 @@ if st.session_state.history:
                                     )
 
             with tab4:
-                st.markdown(f'<span style="{SH}">Source Document</span>', unsafe_allow_html=True)
                 st.markdown(
-                    '<div style="font-size:0.8rem;color:#64748b;margin-bottom:10px">'
-                    'Raw text extracted from the uploaded file — used as input for AI parsing.</div>',
+                    '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #4f46e5;'
+                    'border-radius:12px;padding:14px 18px;margin-bottom:16px">'
+                    '<div style="font-size:0.9rem;font-weight:800;color:#1e40af;margin-bottom:3px">'
+                    'This is the part that used to take 45 minutes</div>'
+                    '<div style="font-size:0.83rem;color:#1e40af;opacity:0.9;line-height:1.6">'
+                    'On the left is the raw, unstructured document exactly as it arrived. '
+                    'On the right is what the AI pulled out of it — automatically, in seconds. '
+                    'A human would normally read the left side and type the right side by hand.</div>'
+                    '</div>',
                     unsafe_allow_html=True,
                 )
-                st.text_area("", doc_text, height=500, key=f"doc_{idx}_{entry['filename']}", label_visibility="collapsed")
+
+                raw_col, out_col = st.columns(2)
+
+                with raw_col:
+                    st.markdown(
+                        '<div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;'
+                        'letter-spacing:0.1em;color:#E24B4A;margin-bottom:8px">'
+                        '📄 Before — raw document</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.text_area(
+                        "", doc_text, height=460,
+                        key=f"doc_{idx}_{entry['filename']}",
+                        label_visibility="collapsed",
+                    )
+
+                with out_col:
+                    st.markdown(
+                        '<div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;'
+                        'letter-spacing:0.1em;color:#1D9E75;margin-bottom:8px">'
+                        '✨ After — structured by AI</div>',
+                        unsafe_allow_html=True,
+                    )
+                    _pairs = [
+                        ("Patient",        result.get("patient_name")),
+                        ("Date of Birth",  result.get("date_of_birth")),
+                        ("Member ID",      result.get("member_id")),
+                        ("Provider",       result.get("provider_name")),
+                        ("Provider NPI",   result.get("provider_npi")),
+                        ("Facility",       result.get("facility_name")),
+                        ("Diagnosis Code", list_or_str(result.get("diagnosis_code"))),
+                        ("Diagnosis",      list_or_str(result.get("diagnosis_description"))),
+                        ("Treatment",      result.get("treatment_requested")),
+                        ("CPT Code",       list_or_str(result.get("cpt_code"))),
+                        ("Payor",          result.get("payor")),
+                        ("Plan",           result.get("plan_name")),
+                        ("Status",         result.get("approval_status")),
+                        ("Auth Number",    result.get("authorization_number")),
+                    ]
+                    _rows = ""
+                    for _lbl, _val in _pairs:
+                        if _val:
+                            _v = f'<span style="color:#0f172a;font-weight:700">{_val}</span>'
+                        else:
+                            _v = '<span style="color:#cbd5e1;font-style:italic">not found</span>'
+                        _rows += (
+                            f'<div style="display:flex;gap:10px;padding:7px 0;'
+                            f'border-bottom:1px solid #f1f5f9">'
+                            f'<span style="min-width:120px;font-size:0.68rem;font-weight:700;'
+                            f'text-transform:uppercase;letter-spacing:0.06em;color:#64748b;'
+                            f'padding-top:2px">{_lbl}</span>'
+                            f'<span style="font-size:0.85rem;flex:1">{_v}</span></div>'
+                        )
+                    st.markdown(
+                        f'<div style="background:white;border:1px solid #86efac;'
+                        f'border-radius:12px;padding:10px 16px;height:460px;overflow-y:auto;'
+                        f'box-shadow:0 2px 8px rgba(29,158,117,0.12)">{_rows}</div>',
+                        unsafe_allow_html=True,
+                    )
 
             with tab5:
                 # ── Agent Verified tab ──────────────────────────────────────
@@ -1143,6 +1443,22 @@ if st.session_state.history:
                     '<div style="font-size:0.82rem;color:#166534;opacity:0.85">'
                     'CMS NPI Registry · NIH ICD-10 · OpenFDA — verified automatically on upload. '
                     'Re-run anytime to refresh.</div></div></div>',
+                    unsafe_allow_html=True,
+                )
+
+                # ── What the 4 agents actually did, in plain English ───────────
+                st.markdown(
+                    f'<div style="background:white;border:1px solid #e2e8f0;'
+                    f'border-left:4px solid #1D9E75;border-radius:14px;'
+                    f'padding:18px 22px;margin-bottom:18px;box-shadow:0 2px 8px rgba(0,0,0,0.04)">'
+                    f'<div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;'
+                    f'letter-spacing:0.12em;color:#1D9E75;margin-bottom:6px">'
+                    f'What the 4 AI agents checked</div>'
+                    f'<div style="font-size:0.8rem;color:#64748b;line-height:1.6;margin-bottom:6px">'
+                    f'Each agent independently queried a real external database — '
+                    f'no guessing, no hallucination.</div>'
+                    f'{agent_story(agent_res, coverage_res)}'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
 
