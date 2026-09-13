@@ -14,6 +14,7 @@ import re
 from datetime import datetime
 from typing import Optional
 from groq import Groq
+from parser import get_model  # single source of truth for the model ID
 
 
 # ── Clinical guideline references by diagnosis category ───────────────────────
@@ -200,7 +201,7 @@ Do not add any explanation before or after the letter. Output ONLY the letter te
         # ── Call Groq LLM ─────────────────────────────────────────────────────
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=get_model(),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2000,
             temperature=0.3,   # low temperature = consistent, formal output

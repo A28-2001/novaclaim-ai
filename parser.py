@@ -3,6 +3,27 @@ import json
 import os
 import time
 
+# ── Model configuration ───────────────────────────────────────────────────────
+# Groq decommissioned llama-3.1-8b-instant and llama-3.3-70b-versatile on
+# 2026-08-16 for free and developer tier accounts. Hardcoded references to those
+# IDs now fail with a model_not_found error.
+#
+# Defined in one place, and overridable via the GROQ_MODEL environment variable
+# (or Streamlit secret) so a future deprecation is a config change, not a code change.
+# Current Groq model list: https://console.groq.com/docs/models
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
+
+
+def get_model() -> str:
+    """
+    Resolve the model ID at call time, not import time.
+
+    Home.py imports this module before it copies Streamlit secrets into the
+    environment, so reading the env var at import would always miss a
+    GROQ_MODEL override set via secrets.
+    """
+    return os.environ.get("GROQ_MODEL") or DEFAULT_GROQ_MODEL
+
 
 def _groq_with_retry(client, max_retries: int = 4, **kwargs):
     """
@@ -107,7 +128,7 @@ Return only the JSON object. No explanation, no markdown, no extra text."""
 
     response = _groq_with_retry(
         client,
-        model="llama-3.1-8b-instant",
+        model=get_model(),
         messages=[{"role": "user", "content": prompt}],
         max_tokens=2048,
     )
@@ -151,7 +172,7 @@ Be specific — avoid generic statements."""
 
     response = _groq_with_retry(
         client,
-        model="llama-3.1-8b-instant",
+        model=get_model(),
         messages=[{"role": "user", "content": prompt}],
         max_tokens=600,
     )

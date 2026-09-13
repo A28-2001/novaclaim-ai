@@ -2,17 +2,43 @@
 
 **Live demo → [novaclaim-ai-geapnrrp2vuegxj4jm5wre.streamlit.app](https://novaclaim-ai-geapnrrp2vuegxj4jm5wre.streamlit.app/)**
 
-NovaClaim AI is an end-to-end prior authorization intelligence platform built for healthcare workflows. Upload a prior auth document (PDF or TXT) and get a structured, AI-powered breakdown in seconds — no manual chart review required.
+---
+
+## 🧠 Data Science & Analytics Skills
+
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
+![Pandas](https://img.shields.io/badge/Pandas-Data%20Wrangling-150458?logo=pandas&logoColor=white)
+![Scikit-learn](https://img.shields.io/badge/Scikit--learn-ML%20Pipeline-F7931E?logo=scikit-learn&logoColor=white)
+![Jupyter](https://img.shields.io/badge/Jupyter-EDA%20Notebook-F37626?logo=jupyter&logoColor=white)
+![SQL](https://img.shields.io/badge/SQL-SQLite-003B57?logo=sqlite&logoColor=white)
+![Matplotlib](https://img.shields.io/badge/Matplotlib-Seaborn-11557c)
+![SciPy](https://img.shields.io/badge/SciPy-Statistical%20Testing-8CAAE6?logo=scipy&logoColor=white)
+
+| Skill | What I built |
+|---|---|
+| **Pandas** | Data wrangling — groupby, merge, pivot, time-series resampling on parsed document records |
+| **Scikit-learn** | End-to-end ML pipeline — Logistic Regression + Random Forest ensemble, `Pipeline`, `cross_val_score`, `roc_auc_score`, feature importance |
+| **Statistical Analysis** | Mann-Whitney U test (SciPy) to validate completeness vs. denial correlation; custom scoring models for risk and denial probability |
+| **Data Visualization** | Matplotlib, Seaborn — ROC curves, confusion matrices, correlation heatmaps, approval rate trends, payor benchmarking charts |
+| **Exploratory Data Analysis** | `analysis.ipynb` — 25-cell Jupyter notebook covering distributions, missing value analysis, temporal trends, and feature engineering |
+| **SQL** | Aggregation queries, `json_each()` for nested arrays, trend queries, audit logging — all computed SQL-side |
+| **Feature Engineering** | 10 numerical features derived from raw document fields (binary presence flags, historical payor rates, completeness scores) |
+| **Model Evaluation** | Holdout split, stratified k-fold CV, classification report, ROC-AUC, confusion matrix |
+| **Data Export** | CSV and Excel (openpyxl) export from the analytics dashboard |
+| **REST API Integration** | CMS NPI registry, NIH ICD-10 API, FDA drug database, Groq LLM API |
 
 ---
 
-## What it does
+## What the Project Does
+
+NovaClaim AI is an end-to-end prior authorization intelligence platform built for healthcare workflows. Upload a prior auth document (PDF or TXT) and get a structured, AI-powered breakdown in seconds — no manual chart review required.
 
 Prior authorization documents are dense, inconsistently formatted, and time-consuming to review. NovaClaim AI parses them automatically and surfaces the information that matters:
 
 - **Completeness scoring** — measures how much required information is present across clinical and administrative fields
 - **Field extraction** — pulls patient info, diagnosis codes, procedure codes, prescribing physician, NPI, drug details, dates, and insurance data
-- **Coverage analysis** — flags which fields are present, missing, or ambiguous
+- **ML-powered denial predictor** (`denial_predictor.py`) — Logistic Regression + Random Forest ensemble trained on historical records; falls back to rule-based scoring when data is insufficient
+- **EDA notebook** (`analysis.ipynb`) — approval rate analysis, payor benchmarking, feature importance, ROC curves, and key operational insights
 - **Risk assessment** — scores the likelihood of denial based on document completeness and field patterns
 - **Manual vs. AI comparison** — side-by-side view showing time and cost savings over traditional review
 - **Persistent history** — all parsed documents are logged in a local SQLite database with full audit trail
@@ -20,42 +46,29 @@ Prior authorization documents are dense, inconsistently formatted, and time-cons
 
 ---
 
-## Tech stack
+## Full Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Language | Python 3.11 |
 | Frontend / UI | Streamlit |
-| AI / LLM | Groq API (Llama 3.3 70B) |
+| AI / LLM | Groq API (`openai/gpt-oss-20b`, configurable via `GROQ_MODEL`) |
 | NLP / text extraction | PyMuPDF, regex, structured prompt engineering |
-| Data manipulation | Pandas (groupby, merge, pivot, time-series resampling) |
+| Data manipulation | Pandas |
 | Data visualization | Matplotlib, Seaborn, Plotly, Streamlit native charts |
 | Machine learning | Scikit-learn — Logistic Regression, Random Forest, Pipeline, cross_val_score, ROC-AUC |
-| Statistical analysis | SciPy (Mann-Whitney U), custom scoring models (completeness, risk, denial probability) |
+| Statistical analysis | SciPy (Mann-Whitney U), custom scoring models |
 | Database | SQLite — SQL aggregations, json_each(), trend queries, audit logging |
 | Data export | CSV, Excel (openpyxl) |
-| REST API integration | Groq REST API, CMS NPI registry, NIH ICD-10 API, FDA drug API, SMTP/Gmail |
-| Exploratory analysis | Jupyter notebook with synthetic + live data fallback (`analysis.ipynb`) |
+| Exploratory analysis | Jupyter notebook (`analysis.ipynb`) |
+| REST API integration | Groq, CMS NPI registry, NIH ICD-10 API, FDA drug API, SMTP/Gmail |
 | Deployment | Streamlit Cloud |
 | Version control | Git, GitHub (SSH) |
 | Secrets management | Streamlit Cloud secrets (`.toml`, gitignored) |
 
 ---
 
-## Features at a glance
-
-- Multi-file upload — parse several documents in one session
-- Completeness score (0–100%) with field-by-field breakdown
-- Color-coded risk levels (Low / Medium / High / Critical)
-- Per-document expandable results with status banners
-- Side-by-side Manual vs. AI comparison table
-- Analytics sidebar with historical trends
-- ML-powered denial predictor (`denial_predictor.py`) — Logistic Regression + Random Forest ensemble, trains on historical records in SQLite, falls back to rule-based scoring when data is insufficient
-- Jupyter EDA notebook (`analysis.ipynb`) — approval rate analysis, payor benchmarking, feature importance, ROC curves, and key operational insights
-
----
-
-## Run locally
+## Run Locally
 
 ```bash
 git clone git@github.com:<your-username>/prior-authorization-document-parser.git
@@ -79,11 +92,12 @@ streamlit run Home.py
 
 ---
 
-## Environment variables
+## Environment Variables
 
 | Variable | Description |
 |---|---|
 | `GROQ_API_KEY` | Groq API key for LLM inference |
+| `GROQ_MODEL` | *(optional)* Override the Groq model ID. Defaults to `openai/gpt-oss-20b`. Set this if Groq deprecates the default — see [current models](https://console.groq.com/docs/models). |
 | `SMTP_EMAIL` | Gmail address for email alerts |
 | `SMTP_APP_PASSWORD` | Gmail App Password (not your account password) |
 
@@ -91,7 +105,7 @@ Never commit `.streamlit/secrets.toml` — it is excluded via `.gitignore`.
 
 ---
 
-## Project structure
+## Project Structure
 
 ```
 ├── Home.py                  # Main app — upload, parse, results
@@ -115,4 +129,4 @@ Never commit `.streamlit/secrets.toml` — it is excluded via `.gitignore`.
 
 ## Background
 
-Built as a full-stack AI project to demonstrate applied LLM usage in a regulated, document-heavy domain. Prior authorization is one of the most time-consuming administrative tasks in US healthcare — this project explores how AI can reduce that burden while maintaining structure and auditability.
+Built as a full-stack AI + data science project to demonstrate applied ML in a regulated, document-heavy domain. Prior authorization is one of the most time-consuming administrative tasks in US healthcare — this project explores how AI and predictive modelling can reduce that burden while maintaining structure and auditability.

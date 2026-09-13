@@ -34,6 +34,12 @@ _groq_key = _secret("GROQ_API_KEY")
 if _groq_key:
     os.environ["GROQ_API_KEY"] = _groq_key  # downstream modules (appeal_agent) read os.environ
 
+# Optional model override. Lets a future Groq deprecation be fixed by editing a
+# secret rather than redeploying code. Must be set before parser.py is imported.
+_groq_model = _secret("GROQ_MODEL")
+if _groq_model:
+    os.environ["GROQ_MODEL"] = _groq_model
+
 # ── Email helper ───────────────────────────────────────────────────────────────
 def _send_demo_email(name: str, email: str, org: str, vol: str,
                      role: str, src: str, msg: str) -> tuple[bool, str]:
@@ -1113,10 +1119,16 @@ if st.session_state.history:
 
 # ── Shared processing pipeline ─────────────────────────────────────────────────
 def _process_document(filename: str, doc_text: str) -> dict | None:
-    """Parse + validate + persist + run all agents for one document. Returns an entry dict."""
+    """
+    Parse + validate + persist + run all agents for one document.
+    Returns an entry dict, or None on failure. On failure the real exception
+    message is stored in st.session_state["_last_parse_error"] so the UI can
+    show what actually went wrong instead of a generic message.
+    """
     try:
         result = parse_prior_auth(doc_text)
-    except Exception:
+    except Exception as e:
+        st.session_state["_last_parse_error"] = f"{type(e).__name__}: {e}"
         return None
     issues    = validate_fields(result)
     record_id = save_record(filename, result, issues)
@@ -1229,7 +1241,24 @@ for _i, (_label, _fname, _fg, _bg, _bdr) in enumerate(SAMPLE_DOCS):
                     st.session_state.history.append(_entry)
                     st.rerun()
                 else:
-                    st.error("Sample failed to parse — check your Groq API key.")
+                    _err = st.session_state.get("_last_parse_error", "")
+                    if "model" in _err.lower() and ("not found" in _err.lower()
+                                                    or "decommission" in _err.lower()
+                                                    or "deprecat" in _err.lower()):
+                        st.error(
+                            "The configured Groq model is no longer available. "
+                            "Set a current model via the GROQ_MODEL secret — "
+                            "see console.groq.com/docs/models."
+                        )
+                    elif "authentication" in _err.lower() or "api key" in _err.lower() or "401" in _err:
+                        st.error("Groq rejected the API key. Check GROQ_API_KEY in your secrets.")
+                    elif "rate limit" in _err.lower() or "429" in _err:
+                        st.error("Groq rate limit reached. Wait a moment and try again.")
+                    else:
+                        st.error("Sample failed to parse.")
+                    if _err:
+                        with st.expander("Technical details"):
+                            st.code(_err)
 
 if not uploaded_files and not st.session_state.history:
     st.markdown("""
@@ -1269,7 +1298,11 @@ if uploaded_files:
             )
             entry = _process_document(uf.name, doc_text)
             if not entry:
+                _err = st.session_state.get("_last_parse_error", "")
                 st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 16px;color:#991b1b;font-weight:600;font-size:0.85rem">✕ Failed to parse <strong>{uf.name}</strong></div>', unsafe_allow_html=True)
+                if _err:
+                    with st.expander(f"Why did {uf.name} fail?"):
+                        st.code(_err)
                 continue
             st.session_state.history.append(entry)
             newly.append(entry)
