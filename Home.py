@@ -2,6 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 import os
+import time
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -85,6 +86,12 @@ st.set_page_config(
 
 init_db()
 
+# A fresh Streamlit Cloud container starts with an empty database. Load the real
+# parser outputs saved by `python evaluate.py` so the app never opens on a near-zero
+# counter. No-op once any real document exists.
+from demo_data import seed_sample_outputs, count_real_records, load_eval_summary
+seed_sample_outputs()
+
 # ── Load Material Symbols font + hide sidebar collapse button ──────────────────
 components.html("""
 <script>
@@ -130,16 +137,15 @@ components.html("""
 
 @st.cache_data(ttl=300)
 def _live_hero_stats() -> dict:
-    """Pull real counts from DB for the hero section. Cached 5 min."""
-    from database import get_summary_stats
-    try:
-        s = get_summary_stats()
-        total    = int(s.get("total",    0) or 0)
-        approved = int(s.get("approved", 0) or 0)
-        rate     = int(approved / total * 100) if total >= 5 else None
-        return {"total": total, "rate": rate}
-    except Exception:
-        return {"total": 0, "rate": None}
+    """
+    Hero numbers. Cached 5 min.
+
+    `total` counts only documents that really went through extraction. The
+    synthetic rows behind the Analytics page's "Load sample documents" button are
+    excluded, so they can never inflate "PA forms parsed".
+    """
+    from database import DB_PATH
+    return {"total": count_real_records(DB_PATH), "eval": load_eval_summary()}
 
 # ── Design tokens ──────────────────────────────────────────────────────────────
 # Teal #1D9E75 | Forest #3B6D11 | Amber #BA7517 | Red #E24B4A | Slate #5F5E5A
@@ -559,21 +565,29 @@ def render_field_row(label, key, value, conf_level=None):
 # Labour rate is a conservative fully-loaded US medical administrator estimate.
 MANUAL_MINUTES   = 20
 MANUAL_HOURLY    = 37.00
-AI_SECONDS_EST   = 22        # typical end-to-end parse + 4 agent calls
-AI_COST_EST      = 0.003     # approximate Groq inference cost per document
+AI_SECONDS_EST   = 22        # fallback only, for documents loaded from history
+AI_COST_EST      = 0.003     # rough upper bound on Groq inference cost per document
 
 
-def savings_card(n_docs: int = 1) -> str:
+def savings_card(elapsed_s: float | None = None) -> str:
     """
-    Concrete time + money comparison between manual review and NovaClaim AI.
-    Turns abstract 'efficiency' into a number someone can quote in a meeting.
+    Concrete time + money comparison between manual review and NovaClaim AI for
+    one document. Uses the measured processing time when it's available, so the
+    number on screen is what this document actually took.
     """
-    man_min   = MANUAL_MINUTES * n_docs
+    measured  = elapsed_s is not None and elapsed_s > 0
+    ai_sec    = elapsed_s if measured else AI_SECONDS_EST
+    man_min   = MANUAL_MINUTES
     man_cost  = MANUAL_HOURLY * (man_min / 60)
-    ai_sec    = AI_SECONDS_EST * n_docs
-    ai_cost   = AI_COST_EST * n_docs
+    ai_cost   = AI_COST_EST
     saved_min = man_min - (ai_sec / 60)
     pct       = (1 - (ai_sec / 60) / man_min) * 100
+    ai_time   = f"{ai_sec:.0f} sec" if measured else f"~{ai_sec:.0f} sec"
+    timing_note = ("NovaClaim time was measured on this document, from upload to risk score, "
+                   "including all four verification agents."
+                   if measured else
+                   "NovaClaim time is a typical value; this document was loaded from history "
+                   "rather than processed in this session.")
 
     def col(title, time_txt, cost_txt, color, bg, sub):
         return (
@@ -595,7 +609,7 @@ def savings_card(n_docs: int = 1) -> str:
         f'<div style="display:flex;gap:12px;flex-wrap:wrap">'
         + col("Manual review", f"{man_min} min", f"≈ ${man_cost:,.2f} in staff time",
               "#E24B4A", "#fef2f2", "A person reads and re-keys every field")
-        + col("NovaClaim AI", f"{ai_sec} sec", f"≈ ${ai_cost:.3f} in compute",
+        + col("NovaClaim AI", ai_time, f"under ${ai_cost:.3f} in compute",
               "#1D9E75", "#f0fdf4", "Parsed, verified and scored automatically")
         + col("Difference", f"{saved_min:.0f} min saved", f"{pct:.1f}% faster",
               "#4f46e5", "#eef2ff", "Per document, every single time")
@@ -603,7 +617,7 @@ def savings_card(n_docs: int = 1) -> str:
         f'<div style="font-size:0.7rem;color:#94a3b8;margin-top:12px;line-height:1.5">'
         f'Manual baseline: ~{MANUAL_MINUTES} min/request, derived from the AMA survey figure of '
         f'13 hours per week across ~39 requests, at ${MANUAL_HOURLY:.0f}/hr fully-loaded admin cost. '
-        f'AI timing measured end-to-end including all four verification agents.'
+        f'{timing_note}'
         f'</div></div>'
     )
 
@@ -977,41 +991,42 @@ if not _groq_key:
     st.stop()
 
 # ── Hero ───────────────────────────────────────────────────────────────────────
+HERO_MIN_DOCS = 5   # below this, a live count reads as "nobody uses this"
+
+
+def hero_stats(total: int, ev: dict | None) -> list[tuple[str, str]]:
+    """
+    The (number, label) pairs shown in the hero. Every one is either measured or
+    a plain fact about the system; nothing is an unsourced estimate.
+    """
+    stats = []
+
+    # 1. Volume: the real count once it's meaningful, else what each parse yields.
+    if total >= HERO_MIN_DOCS:
+        stats.append((f"{total:,}", "PA form parsed" if total == 1 else "PA forms parsed"))
+    else:
+        stats.append(("12", "clinical fields extracted per form"))
+
+    # 2-3. Quality and speed, measured by `python evaluate.py` on the labeled test set.
+    if ev and ev.get("field_accuracy") is not None:
+        n = ev.get("n_docs") or 0
+        stats.append((f"{ev['field_accuracy'] * 100:.0f}%",
+                      f"field accuracy on a {n}-document synthetic test set"))
+        if ev.get("median_end_to_end_s"):
+            stats.append((f"{ev['median_end_to_end_s']:.0f}s",
+                          "median time to parse, verify and score"))
+
+    # 4. Architecture (always true).
+    stats.append(("4", "AI agents checking external databases"))
+    return stats
+
+
 def _hero_stat_block() -> str:
-    """Return three hero stat divs, using real DB numbers when available."""
     hs = _live_hero_stats()
-    total = hs["total"]
-    rate  = hs["rate"]
-
-    # Stat 1: documents actually parsed by this instance (falls back to a
-    # verifiable capability claim rather than an invented volume figure).
-    if total > 0:
-        s1_num   = f"{total:,}"
-        s1_label = "PA forms parsed"
-    else:
-        s1_num   = "12"
-        s1_label = "clinical fields extracted per form"
-
-    # Stat 2: measured end-to-end, including all four agent API calls
-    s2_num   = "< 30s"
-    s2_label = "parse, verify and score a document"
-
-    # Stat 3: real approval rate once there's enough history, else the
-    # verifiable architecture claim.
-    if rate is not None:
-        s3_num   = f"{rate}%"
-        s3_label = "historical approval rate"
-    else:
-        s3_num   = "4"
-        s3_label = "AI agents checking external databases"
-
-    return (
-        f'<div><div style="font-size:1.5rem;font-weight:900;color:white">{s1_num}</div>'
-        f'<div style="font-size:0.68rem;color:#64748b;margin-top:2px">{s1_label}</div></div>'
-        f'<div><div style="font-size:1.5rem;font-weight:900;color:white">{s2_num}</div>'
-        f'<div style="font-size:0.68rem;color:#64748b;margin-top:2px">{s2_label}</div></div>'
-        f'<div><div style="font-size:1.5rem;font-weight:900;color:white">{s3_num}</div>'
-        f'<div style="font-size:0.68rem;color:#64748b;margin-top:2px">{s3_label}</div></div>'
+    return "".join(
+        f'<div><div style="font-size:1.5rem;font-weight:900;color:white">{num}</div>'
+        f'<div style="font-size:0.68rem;color:#64748b;margin-top:2px;max-width:150px">{label}</div></div>'
+        for num, label in hero_stats(hs["total"], hs["eval"])
     )
 
 st.markdown(f"""
@@ -1125,6 +1140,7 @@ def _process_document(filename: str, doc_text: str) -> dict | None:
     message is stored in st.session_state["_last_parse_error"] so the UI can
     show what actually went wrong instead of a generic message.
     """
+    _t0 = time.perf_counter()     # measured, so the savings card shows real time
     try:
         result = parse_prior_auth(doc_text)
     except Exception as e:
@@ -1154,6 +1170,7 @@ def _process_document(filename: str, doc_text: str) -> dict | None:
         "agent_res":    agent_res,
         "coverage_res": coverage_res,
         "risk_res":     risk_res,
+        "elapsed_s":    time.perf_counter() - _t0,
     }
 
 # Curated sample documents shown as one-click "Try a sample" buttons
@@ -1452,7 +1469,7 @@ if st.session_state.history:
             )
 
             # ── Concrete time + cost saved on this document ────────────────────
-            st.markdown(savings_card(1), unsafe_allow_html=True)
+            st.markdown(savings_card(entry.get("elapsed_s")), unsafe_allow_html=True)
 
             if errors or warnings:
                 chips  = "".join(f'<span style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:4px 10px;font-size:0.78rem;font-weight:600;margin:2px;display:inline-block">✕ {i["message"]}</span>' for i in errors)
@@ -2259,7 +2276,7 @@ st.markdown("""
   <a class="about-link" href="mailto:aakashmehta893@gmail.com">✉️ aakashmehta893@gmail.com</a>
   <div class="about-stat-row">
     <div><div class="about-stat-num">4</div><div class="about-stat-label">AI agents</div></div>
-    <div><div class="about-stat-num">&lt; 30s</div><div class="about-stat-label">parse + verify + score</div></div>
+    <div><div class="about-stat-num">12</div><div class="about-stat-label">labeled test documents</div></div>
     <div><div class="about-stat-num">3</div><div class="about-stat-label">live external APIs</div></div>
     <div><div class="about-stat-num">17 fields</div><div class="about-stat-label">extracted per doc</div></div>
   </div>

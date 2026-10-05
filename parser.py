@@ -25,6 +25,62 @@ def get_model() -> str:
     return os.environ.get("GROQ_MODEL") or DEFAULT_GROQ_MODEL
 
 
+def _supports_reasoning_effort(model: str) -> bool:
+    """Groq accepts reasoning_effort only on its reasoning models."""
+    return model.startswith("openai/gpt-oss") or model.startswith("qwen/qwen3")
+
+
+def _extract_json(raw: str) -> dict:
+    """
+    Pull the JSON object out of a model response. Tolerates markdown code fences
+    and stray text before or after the object.
+    """
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            return json.loads(text[start:end + 1])
+        raise
+
+
+def _request_extraction(client, prompt: str, max_tokens: int = 2048) -> dict:
+    """
+    Send the extraction prompt and return the parsed JSON object.
+
+    gpt-oss is a reasoning model, and its reasoning tokens come out of the same
+    max_tokens budget as the answer. At the default (medium) effort a long
+    document can exhaust the budget mid-JSON, so the parse fails. For a
+    structured extraction task, low effort is enough, and JSON mode guarantees a
+    parseable object.
+
+    If Groq rejects either option (a non-reasoning model set via GROQ_MODEL, an
+    older SDK, or a JSON-mode validation failure), or the reply isn't usable
+    JSON, fall back to the plain request the app used before these options
+    were added.
+    """
+    model = get_model()
+    base = dict(model=model, messages=[{"role": "user", "content": prompt}], max_tokens=max_tokens)
+    tuned = dict(base, response_format={"type": "json_object"})
+    if _supports_reasoning_effort(model):
+        tuned["extra_body"] = {"reasoning_effort": "low"}
+    try:
+        response = _groq_with_retry(client, **tuned)
+        return _extract_json(response.choices[0].message.content)
+    except Exception as e:
+        msg = str(e).lower()
+        if "rate limit" in msg or "429" in msg or "too many" in msg:
+            raise                      # retrying without options won't help a rate limit
+        response = _groq_with_retry(client, **base)
+        return _extract_json(response.choices[0].message.content)
+
+
 def _groq_with_retry(client, max_retries: int = 4, **kwargs):
     """
     Call client.chat.completions.create with exponential backoff on rate limit errors.
@@ -126,22 +182,7 @@ Document:
 
 Return only the JSON object. No explanation, no markdown, no extra text."""
 
-    response = _groq_with_retry(
-        client,
-        model=get_model(),
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=2048,
-    )
-
-    raw = response.choices[0].message.content.strip()
-
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-
-    result = json.loads(raw)
+    result = _request_extraction(client, prompt)
 
     # Normalize approval_status to Title Case so analytics charts are consistent
     valid_statuses = {"approved": "Approved", "denied": "Denied", "pending": "Pending", "unknown": "Unknown"}

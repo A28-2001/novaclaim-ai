@@ -1,14 +1,14 @@
 """
 demo_data.py
 ============
-Seeds the database with a labelled set of demo prior-authorization records.
+Seeds the database with a labeled set of demo prior-authorization records.
 
 Why this exists
 ---------------
 `prior_auth.db` is gitignored, so a freshly deployed instance starts empty and
 the Analytics dashboard renders blank charts. A blank dashboard reads as
 "broken" to a first-time visitor. This module lets the app populate itself
-with a realistic, clearly-labelled demo dataset on demand.
+with a realistic, clearly labeled demo dataset on demand.
 
 Every seeded record has `filename` prefixed with "demo_" so demo rows are
 always distinguishable from documents a real user parsed.
@@ -123,17 +123,107 @@ def _build_records(n: int = 26) -> list[dict]:
     return records
 
 
+# Exact prefix test. (LIKE 'demo_%' would be wrong: "_" is a LIKE wildcard, so it
+# would also match a real upload named e.g. "demonstration.pdf".)
+_IS_DEMO = f"substr(filename, 1, {len(DEMO_PREFIX)}) = '{DEMO_PREFIX}'"
+
+
 def demo_records_present(db_path: str = DB_PATH) -> bool:
     """True if demo rows are already in the database."""
     try:
         conn = sqlite3.connect(db_path)
-        n = conn.execute(
-            "SELECT COUNT(*) FROM records WHERE filename LIKE ?", (DEMO_PREFIX + "%",)
-        ).fetchone()[0]
+        n = conn.execute(f"SELECT COUNT(*) FROM records WHERE {_IS_DEMO}").fetchone()[0]
         conn.close()
         return n > 0
     except Exception:
         return False
+
+
+def count_real_records(db_path: str = DB_PATH) -> int:
+    """
+    Documents that genuinely went through the extraction pipeline, i.e. everything
+    except the synthetic demo rows. This is the only number the app should ever
+    present as "PA forms parsed".
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        n = conn.execute(f"SELECT COUNT(*) FROM records WHERE NOT ({_IS_DEMO})").fetchone()[0]
+        conn.close()
+        return int(n)
+    except Exception:
+        return 0
+
+
+# ── Seeding a fresh deployment with real parser outputs ──────────────────────
+#
+# Streamlit Community Cloud gives each container an empty prior_auth.db, so the
+# home page would otherwise open on "1 PA forms parsed" or similar. Running
+# `python evaluate.py` saves the real parser output for every test-set document to
+# eval/parsed_outputs.json. These are genuine extractions, not fabricated rows, and
+# an empty deployment loads them on first start.
+
+import threading
+
+EVAL_DIR          = os.path.join(os.path.dirname(__file__), "eval")
+EVAL_OUTPUTS_PATH = os.path.join(EVAL_DIR, "parsed_outputs.json")
+EVAL_RESULTS_PATH = os.path.join(EVAL_DIR, "results.json")
+
+_seed_lock = threading.Lock()
+_seed_checked = False
+
+
+def seed_sample_outputs(outputs_path: str = EVAL_OUTPUTS_PATH) -> int:
+    """
+    If the database holds no real documents, load the evaluation run's parsed
+    sample documents into it. Runs at most once per process. Returns rows added.
+    """
+    global _seed_checked
+    if _seed_checked:
+        return 0
+    with _seed_lock:
+        if _seed_checked:
+            return 0
+        _seed_checked = True
+        try:
+            import database
+            from validator import validate_fields
+            if count_real_records(database.DB_PATH) > 0 or not os.path.exists(outputs_path):
+                return 0
+            with open(outputs_path, encoding="utf-8") as fh:
+                docs = json.load(fh).get("documents", [])
+            added = 0
+            for d in docs:
+                result = d.get("result")
+                if not isinstance(result, dict):
+                    continue
+                record_id = database.save_record(d["file"], result, validate_fields(result))
+                if d.get("agent_res"):
+                    database.save_agent_results(record_id, d["agent_res"])
+                added += 1
+            return added
+        except Exception:
+            return 0          # seeding is a nicety; never block the app on it
+
+
+def load_eval_summary(results_path: str = EVAL_RESULTS_PATH) -> dict | None:
+    """Headline numbers from the latest `python evaluate.py` run, if one exists."""
+    try:
+        with open(results_path, encoding="utf-8") as fh:
+            r = json.load(fh)
+        # Ignore a run where nothing parsed (e.g. a bad API key): its 0% says
+        # nothing about extraction quality and must never reach the home page.
+        if r.get("field_accuracy") is None or not r.get("docs_parsed"):
+            return None
+        return {
+            "field_accuracy":      r["field_accuracy"],
+            "n_docs":              r.get("n_docs"),
+            "docs_parsed":         r.get("docs_parsed"),
+            "median_end_to_end_s": r.get("median_end_to_end_s"),
+            "median_parse_s":      r.get("median_parse_s"),
+            "model":               (r.get("meta") or {}).get("model"),
+        }
+    except Exception:
+        return None
 
 
 def seed_demo_data(db_path: str = DB_PATH, n: int = 26) -> int:
@@ -177,7 +267,7 @@ def seed_demo_data(db_path: str = DB_PATH, n: int = 26) -> int:
 def clear_demo_data(db_path: str = DB_PATH) -> int:
     """Remove all demo records. Returns number deleted."""
     conn = sqlite3.connect(db_path)
-    cur = conn.execute("DELETE FROM records WHERE filename LIKE ?", (DEMO_PREFIX + "%",))
+    cur = conn.execute(f"DELETE FROM records WHERE {_IS_DEMO}")
     conn.commit()
     n = cur.rowcount
     conn.close()

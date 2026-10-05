@@ -1,0 +1,898 @@
+{
+  "meta": {
+    "run_at": "2026-10-05T11:31:34",
+    "run_date": "2026-10-05",
+    "model": "openai/gpt-oss-20b",
+    "with_agents": true,
+    "git_commit": "940289d",
+    "python": "3.11.7"
+  },
+  "documents": [
+    {
+      "file": "sample.txt",
+      "result": {
+        "patient_name": "Maria Elena Gonzalez",
+        "date_of_birth": "1978-04-15",
+        "member_id": "BCB-774920183",
+        "provider_name": "Dr. James R. Hartwell, MD",
+        "provider_npi": "1234567890",
+        "facility_name": "Northwestern Memorial Hospital",
+        "diagnosis_code": [
+          "C50.411",
+          "I97.2"
+        ],
+        "diagnosis_description": [
+          "Breast cancer, right upper-outer quadrant",
+          "Lymphedema following mastectomy"
+        ],
+        "treatment_requested": "Pertuzumab (Perjeta) 420mg IV infusion \u2014 6 cycles",
+        "cpt_code": [
+          "96413"
+        ],
+        "payor": "BlueCross BlueShield of Illinois",
+        "plan_name": "PPO Gold 500",
+        "approval_status": "Approved",
+        "approval_date": "2024-11-07",
+        "denial_reason": null,
+        "authorization_number": "AUTH-2024-00448821",
+        "notes": "Prior authorization approved for 6 cycles of Pertuzumab 420mg IV per NCCN guidelines for HER2+ breast cancer. Re-authorization required after cycle 6.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "1234567890",
+          "submitted_name": "Dr. James R. Hartwell, MD",
+          "status": "not_found",
+          "message": "NPI 1234567890 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "C50.411",
+            "extracted_description": "Breast cancer, right upper-outer quadrant",
+            "status": "valid",
+            "official_description": "Malignant neoplasm of upper-outer quadrant of right female breast",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Malignant neoplasm of upper-outer quadrant of right female breast \u00b7 Description matches \u2713"
+          },
+          {
+            "code": "I97.2",
+            "extracted_description": "Lymphedema following mastectomy",
+            "status": "valid",
+            "official_description": "Postmastectomy lymphedema syndrome",
+            "description_match": false,
+            "message": "Valid ICD-10 code \u00b7 Postmastectomy lymphedema syndrome \u00b7 Description differs from official"
+          }
+        ],
+        "drug_verification": null
+      },
+      "parse_s": 0.96
+    },
+    {
+      "file": "sample.pdf",
+      "result": {
+        "patient_name": "Maria Elena Gonzalez",
+        "date_of_birth": "1978-04-15",
+        "member_id": "BCB-774920183",
+        "provider_name": "Dr. James R. Hartwell, MD",
+        "provider_npi": "1234567890",
+        "facility_name": "Northwestern Memorial Hospital",
+        "diagnosis_code": [
+          "C50.411",
+          "I97.2"
+        ],
+        "diagnosis_description": [
+          "Breast cancer, right upper-outer quadrant",
+          "Lymphedema following mastectomy"
+        ],
+        "treatment_requested": "Pertuzumab (Perjeta) 420mg IV infusion - 6 cycles",
+        "cpt_code": [
+          "96413"
+        ],
+        "payor": "BlueCross BlueShield of Illinois",
+        "plan_name": "PPO Gold 500",
+        "approval_status": "Approved",
+        "approval_date": "2024-11-07",
+        "denial_reason": null,
+        "authorization_number": "AUTH-2024-00448821",
+        "notes": "Prior authorization approved for 6 cycles of Pertuzumab 420mg IV per NCCN guidelines for HER2+ breast cancer. Re-authorization required after cycle 6.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "1234567890",
+          "submitted_name": "Dr. James R. Hartwell, MD",
+          "status": "not_found",
+          "message": "NPI 1234567890 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "C50.411",
+            "extracted_description": "Breast cancer, right upper-outer quadrant",
+            "status": "valid",
+            "official_description": "Malignant neoplasm of upper-outer quadrant of right female breast",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Malignant neoplasm of upper-outer quadrant of right female breast \u00b7 Description matches \u2713"
+          },
+          {
+            "code": "I97.2",
+            "extracted_description": "Lymphedema following mastectomy",
+            "status": "valid",
+            "official_description": "Postmastectomy lymphedema syndrome",
+            "description_match": false,
+            "message": "Valid ICD-10 code \u00b7 Postmastectomy lymphedema syndrome \u00b7 Description differs from official"
+          }
+        ],
+        "drug_verification": null
+      },
+      "parse_s": 0.91
+    },
+    {
+      "file": "sample_approved_insulin.txt",
+      "result": {
+        "patient_name": "David A. Thornton",
+        "date_of_birth": "1958-11-03",
+        "member_id": "UHC-882047391",
+        "provider_name": "Dr. Patricia M. Ellison, MD",
+        "provider_npi": "3456789012",
+        "facility_name": "Indiana University Health Methodist Hospital",
+        "diagnosis_code": [
+          "E11.65"
+        ],
+        "diagnosis_description": [
+          "Type 2 diabetes mellitus with diabetic chronic kidney disease, stage 3"
+        ],
+        "treatment_requested": "Insulin pump (Medtronic MiniMed 780G) with continuous glucose monitoring",
+        "cpt_code": [
+          "95249"
+        ],
+        "payor": "UnitedHealthcare",
+        "plan_name": "Choice Plus PPO",
+        "approval_status": "Approved",
+        "approval_date": "2024-09-17",
+        "denial_reason": null,
+        "authorization_number": "AUTH-2024-00551204",
+        "notes": "Approved per ADA guidelines for uncontrolled T2DM with recurrent hypoglycemia. Annual review required. Patient must attend pump training before activation.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "3456789012",
+          "submitted_name": "Dr. Patricia M. Ellison, MD",
+          "status": "not_found",
+          "message": "NPI 3456789012 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "E11.65",
+            "extracted_description": "Type 2 diabetes mellitus with diabetic chronic kidney disease, stage 3",
+            "status": "valid",
+            "official_description": "Type 2 diabetes mellitus with hyperglycemia",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Type 2 diabetes mellitus with hyperglycemia \u00b7 Description matches \u2713"
+          }
+        ],
+        "drug_verification": {
+          "searched_name": "Insulin",
+          "status": "found",
+          "fda_brand": ".Insulin Aspart Protamine and Insulin Aspart",
+          "generic_name": "INSULIN ASPART",
+          "manufacturer": "A-S Medication Solutions",
+          "route": "SUBCUTANEOUS",
+          "message": "Drug verified in FDA database \u00b7 .Insulin Aspart Protamine and Insulin Aspart"
+        }
+      },
+      "parse_s": 1.01
+    },
+    {
+      "file": "sample_approved_tms.txt",
+      "result": {
+        "patient_name": "Sarah J. Whitfield",
+        "date_of_birth": "1990-08-18",
+        "member_id": "ANT-773920041",
+        "provider_name": "Dr. Marcus D. Greene, MD",
+        "provider_npi": "2345678901",
+        "facility_name": "OhioHealth Riverside Methodist Hospital",
+        "diagnosis_code": [
+          "F33.2"
+        ],
+        "diagnosis_description": [
+          "Major depressive disorder, recurrent, severe without psychotic features"
+        ],
+        "treatment_requested": "Transcranial Magnetic Stimulation (TMS) therapy \u2014 36 sessions",
+        "cpt_code": [
+          "90867"
+        ],
+        "payor": "Anthem Blue Cross Blue Shield",
+        "plan_name": "BlueAccess PPO",
+        "approval_status": "Approved",
+        "approval_date": "2024-08-29",
+        "denial_reason": null,
+        "authorization_number": "AUTH-2024-00389147",
+        "notes": "Approved for treatment-resistant MDD per Anthem clinical policy PSY-048. Patient must maintain concurrent psychiatric medication management throughout TMS course.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "2345678901",
+          "submitted_name": "Dr. Marcus D. Greene, MD",
+          "status": "not_found",
+          "message": "NPI 2345678901 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "F33.2",
+            "extracted_description": "Major depressive disorder, recurrent, severe without psychotic features",
+            "status": "valid",
+            "official_description": "Major depressive disorder, recurrent severe without psychotic features",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Major depressive disorder, recurrent severe without psychotic features \u00b7 Description matches \u2713"
+          }
+        ],
+        "drug_verification": null
+      },
+      "parse_s": 1.0
+    },
+    {
+      "file": "sample_denied.txt",
+      "result": {
+        "patient_name": "Robert D. Kessler",
+        "date_of_birth": "1965-08-22",
+        "member_id": "AET-330481920",
+        "provider_name": "Dr. Sandra L. Cho, MD",
+        "provider_npi": "9876543210",
+        "facility_name": "Rush University Medical Center",
+        "diagnosis_code": [
+          "M17.12"
+        ],
+        "diagnosis_description": [
+          "Degenerative joint disease, left knee"
+        ],
+        "treatment_requested": "Total left knee arthroplasty (TKA)",
+        "cpt_code": [
+          "27447"
+        ],
+        "payor": "Aetna Health Plans",
+        "plan_name": "HMO Select 1000",
+        "approval_status": "Denied",
+        "approval_date": "2024-10-22",
+        "denial_reason": "Requested procedure does not meet medical necessity criteria. Medical records do not sufficiently document failure of all required conservative treatment modalities. Specifically, documentation of physical therapy is incomplete \u2014 only 12 of the required 20 sessions were documented in submitted records. Additionally, hyaluronic acid (viscosupplementation) injections were not attempted prior to surgical request, as required per plan guidelines (Policy MED-0042).",
+        "authorization_number": null,
+        "notes": "Patient presents with severe osteoarthritis of the left knee with bone-on-bone changes confirmed on X-ray (Kellgren-Lawrence Grade 4). Patient has failed 6 months of conservative therapy including physical therapy (20 sessions), NSAIDs, and two corticosteroid injections. VAS pain score: 8/10. BMI: 28.4. KOOS score: 32 (severe functional impairment). Patient is unable to climb stairs or walk more than one city block without significant pain.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "9876543210",
+          "submitted_name": "Dr. Sandra L. Cho, MD",
+          "status": "not_found",
+          "message": "NPI 9876543210 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "M17.12",
+            "extracted_description": "Degenerative joint disease, left knee",
+            "status": "valid",
+            "official_description": "Unilateral primary osteoarthritis, left knee",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Unilateral primary osteoarthritis, left knee \u00b7 Description matches \u2713"
+          }
+        ],
+        "drug_verification": null
+      },
+      "parse_s": 0.99
+    },
+    {
+      "file": "sample_denied_gallbladder.txt",
+      "result": {
+        "patient_name": "Carlos M. Reyes",
+        "date_of_birth": "1974-02-07",
+        "member_id": "MOL-441038822",
+        "provider_name": "Dr. Linda H. Tran, MD",
+        "provider_npi": "8901234567",
+        "facility_name": "Cedars-Sinai Medical Center",
+        "diagnosis_code": [
+          "K80.10"
+        ],
+        "diagnosis_description": [
+          "Calculus of gallbladder with chronic cholecystitis"
+        ],
+        "treatment_requested": "Laparoscopic cholecystectomy",
+        "cpt_code": [
+          "47562"
+        ],
+        "payor": "Molina Healthcare",
+        "plan_name": "Marketplace Silver 70",
+        "approval_status": "Denied",
+        "approval_date": "2024-10-11",
+        "denial_reason": "Request does not meet Molina Healthcare medical necessity criteria for elective cholecystectomy (Policy SURG-014). Submitted records do not document a recent acute cholecystitis episode confirmed by imaging or labs, biliary colic frequency (minimum 3 documented episodes in medical record required), or dietary modification trial. Additionally, operative risk assessment (ASA classification) was not included in the submission. Provider must resubmit with complete clinical documentation including pain frequency log, dietary consultation note, and updated lab panel (CBC, LFTs, lipase).",
+        "authorization_number": null,
+        "notes": "Appeal Deadline: 2024-11-11; Reviewer: Dr. F. Adeyemi, MD (General Surgery)",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "8901234567",
+          "submitted_name": "Dr. Linda H. Tran, MD",
+          "status": "not_found",
+          "message": "NPI 8901234567 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "K80.10",
+            "extracted_description": "Calculus of gallbladder with chronic cholecystitis",
+            "status": "valid",
+            "official_description": "Calculus of gallbladder with chronic cholecystitis without obstruction",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Calculus of gallbladder with chronic cholecystitis without obstruction \u00b7 Description matches \u2713"
+          }
+        ],
+        "drug_verification": null
+      },
+      "parse_s": 0.9
+    },
+    {
+      "file": "sample_denied_mri.txt",
+      "result": {
+        "patient_name": "Angela R. Foster",
+        "date_of_birth": "1982-06-14",
+        "member_id": "CIG-558204817",
+        "provider_name": "Dr. Kevin B. Okafor, MD",
+        "provider_npi": "5678901234",
+        "facility_name": "UCHealth University of Colorado Hospital",
+        "diagnosis_code": [
+          "M54.42"
+        ],
+        "diagnosis_description": [
+          "Low back pain with radiculopathy"
+        ],
+        "treatment_requested": "MRI lumbar spine without contrast",
+        "cpt_code": [
+          "72148"
+        ],
+        "payor": "Cigna Health and Life Insurance",
+        "plan_name": "Open Access Plus",
+        "approval_status": "Denied",
+        "approval_date": "2024-11-01",
+        "denial_reason": "Does not meet medical necessity criteria per Cigna coverage policy",
+        "authorization_number": null,
+        "notes": "Patient has not completed conservative treatment prior to advanced imaging request. Recommend initiating physical therapy and NSAIDs first. Re-submit after 6 weeks if symptoms persist.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "5678901234",
+          "submitted_name": "Dr. Kevin B. Okafor, MD",
+          "status": "not_found",
+          "message": "NPI 5678901234 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "M54.42",
+            "extracted_description": "Low back pain with radiculopathy",
+            "status": "valid",
+            "official_description": "Lumbago with sciatica, left side",
+            "description_match": false,
+            "message": "Valid ICD-10 code \u00b7 Lumbago with sciatica, left side \u00b7 Description differs from official"
+          }
+        ],
+        "drug_verification": null
+      },
+      "parse_s": 8.03
+    },
+    {
+      "file": "sample_pending_chemo.txt",
+      "result": {
+        "patient_name": "Thomas W. Nakamura",
+        "date_of_birth": "1951-03-29",
+        "member_id": "HUM-109384720",
+        "provider_name": "Dr. Rachel S. Patel, MD",
+        "provider_npi": "7890123456",
+        "facility_name": "Emory University Hospital",
+        "diagnosis_code": [
+          "C34.11",
+          "C77.1"
+        ],
+        "diagnosis_description": [
+          "Malignant neoplasm of the upper lobe, right bronchus or lung",
+          "Secondary malignant neoplasm of intrathoracic lymph nodes"
+        ],
+        "treatment_requested": "Pembrolizumab (Keytruda) 200mg IV every 3 weeks \u2014 4 cycles",
+        "cpt_code": [
+          "96413"
+        ],
+        "payor": "Humana",
+        "plan_name": "Gold Plus HMO",
+        "approval_status": "Pending",
+        "approval_date": null,
+        "denial_reason": null,
+        "authorization_number": null,
+        "notes": "Additional clinical records requested by Humana Medical Review team. Awaiting submission of: (1) full pathology report confirming PD-L1 score, (2) most recent PFT results, (3) tumor board consultation note. Expected decision within 5 business days of receipt of requested records.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "7890123456",
+          "submitted_name": "Dr. Rachel S. Patel, MD",
+          "status": "not_found",
+          "message": "NPI 7890123456 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "C34.11",
+            "extracted_description": "Malignant neoplasm of the upper lobe, right bronchus or lung",
+            "status": "valid",
+            "official_description": "Malignant neoplasm of upper lobe, right bronchus or lung",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Malignant neoplasm of upper lobe, right bronchus or lung \u00b7 Description matches \u2713"
+          },
+          {
+            "code": "C77.1",
+            "extracted_description": "Secondary malignant neoplasm of intrathoracic lymph nodes",
+            "status": "valid",
+            "official_description": "Secondary and unspecified malignant neoplasm of intrathoracic lymph nodes",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Secondary and unspecified malignant neoplasm of intrathoracic lymph nodes \u00b7 Description matches \u2713"
+          }
+        ],
+        "drug_verification": null
+      },
+      "parse_s": 11.07
+    },
+    {
+      "file": "test_bad_npi.txt",
+      "result": {
+        "patient_name": "James Thornton",
+        "date_of_birth": "1980-07-19",
+        "member_id": "CIG-3381027",
+        "provider_name": "Dr. Michael Sterling",
+        "provider_npi": "1234567890",
+        "facility_name": "Riverside General Hospital",
+        "diagnosis_code": [
+          "F41.1"
+        ],
+        "diagnosis_description": [
+          "Generalized anxiety disorder"
+        ],
+        "treatment_requested": "Escitalopram 10mg tablet once daily",
+        "cpt_code": [
+          "90837"
+        ],
+        "payor": "Cigna",
+        "plan_name": "Cigna Open Access Plus",
+        "approval_status": "Pending",
+        "approval_date": null,
+        "denial_reason": null,
+        "authorization_number": null,
+        "notes": "Patient has trialed two prior SSRIs without adequate response. Requesting continuation of current effective therapy.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "low",
+          "denial_reason": "low",
+          "authorization_number": "low",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "1234567890",
+          "submitted_name": "Dr. Michael Sterling",
+          "status": "not_found",
+          "message": "NPI 1234567890 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "F41.1",
+            "extracted_description": "Generalized anxiety disorder",
+            "status": "valid",
+            "official_description": "Generalized anxiety disorder",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Generalized anxiety disorder \u00b7 Description matches \u2713"
+          }
+        ],
+        "drug_verification": {
+          "searched_name": "Escitalopram",
+          "status": "found",
+          "fda_brand": "Escitalopram Oral Solution",
+          "generic_name": "ESCITALOPRAM ORAL",
+          "manufacturer": "Chartwell RX, LLC",
+          "route": "ORAL",
+          "message": "Drug verified in FDA database \u00b7 Escitalopram Oral Solution"
+        }
+      },
+      "parse_s": 4.79
+    },
+    {
+      "file": "test_drug_lookup.txt",
+      "result": {
+        "patient_name": "Dorothy Kim",
+        "date_of_birth": "1952-11-30",
+        "member_id": "AET-7723900",
+        "provider_name": "Dr. Samuel Okafor",
+        "provider_npi": "1134152443",
+        "facility_name": "Heartland Cardiology Associates",
+        "diagnosis_code": [
+          "I10"
+        ],
+        "diagnosis_description": [
+          "Essential (primary) hypertension with chronic heart failure"
+        ],
+        "treatment_requested": "Lisinopril 10mg tablet once daily for blood pressure management",
+        "cpt_code": [
+          "99214"
+        ],
+        "payor": "Aetna",
+        "plan_name": "Medicare Advantage",
+        "approval_status": "Approved",
+        "approval_date": "2026-06-18",
+        "denial_reason": null,
+        "authorization_number": "AUTH-2026-091004",
+        "notes": "Patient intolerant to ARB class. ACE inhibitor appropriate per ACC/AHA guidelines.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "1134152443",
+          "submitted_name": "Dr. Samuel Okafor",
+          "status": "not_found",
+          "message": "NPI 1134152443 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "I10",
+            "extracted_description": "Essential (primary) hypertension with chronic heart failure",
+            "status": "valid",
+            "official_description": "Essential (primary) hypertension",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Essential (primary) hypertension \u00b7 Description matches \u2713"
+          }
+        ],
+        "drug_verification": {
+          "searched_name": "Lisinopril",
+          "status": "found",
+          "fda_brand": "Lisinopril and Hydrochlorothiazide",
+          "generic_name": "LISINOPRIL AND HYDROCHLOROTHIAZIDE TABLETS",
+          "manufacturer": "St. Mary's Medical Park Pharmacy",
+          "route": "ORAL",
+          "message": "Drug verified in FDA database \u00b7 Lisinopril and Hydrochlorothiazide"
+        }
+      },
+      "parse_s": 0.82
+    },
+    {
+      "file": "test_icd10_codes.txt",
+      "result": {
+        "patient_name": "Marcus Rivera",
+        "date_of_birth": "1965-09-02",
+        "member_id": "BCBS-4490128",
+        "provider_name": "Dr. Angela Chen MD",
+        "provider_npi": "1457471942",
+        "facility_name": "Pacific Coast Oncology Center",
+        "diagnosis_code": [
+          "C50.411",
+          "C79.51"
+        ],
+        "diagnosis_description": [
+          "Malignant neoplasm of upper-outer quadrant of right female breast",
+          "Secondary malignant neoplasm of bone"
+        ],
+        "treatment_requested": "Trastuzumab (Herceptin) 6mg/kg IV infusion every 21 days",
+        "cpt_code": [
+          "96413"
+        ],
+        "payor": "Blue Cross Blue Shield",
+        "plan_name": "Blue Cross Blue Shield PPO Platinum",
+        "approval_status": "Approved",
+        "approval_date": "2026-06-15",
+        "denial_reason": null,
+        "authorization_number": "AUTH-2026-088821",
+        "notes": "HER2-positive confirmed by biopsy. Treatment per NCCN guidelines.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "1457471942",
+          "submitted_name": "Dr. Angela Chen MD",
+          "status": "not_found",
+          "message": "NPI 1457471942 does not exist in the CMS National Registry."
+        },
+        "icd10_verification": [
+          {
+            "code": "C50.411",
+            "extracted_description": "Malignant neoplasm of upper-outer quadrant of right female breast",
+            "status": "valid",
+            "official_description": "Malignant neoplasm of upper-outer quadrant of right female breast",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Malignant neoplasm of upper-outer quadrant of right female breast \u00b7 Description matches \u2713"
+          },
+          {
+            "code": "C79.51",
+            "extracted_description": "Secondary malignant neoplasm of bone",
+            "status": "valid",
+            "official_description": "Secondary malignant neoplasm of bone",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Secondary malignant neoplasm of bone \u00b7 Description matches \u2713"
+          }
+        ],
+        "drug_verification": {
+          "searched_name": "kg IV",
+          "status": "not_found",
+          "message": "'kg IV' was not found in the FDA drug label database."
+        }
+      },
+      "parse_s": 7.92
+    },
+    {
+      "file": "test_real_npi.txt",
+      "result": {
+        "patient_name": "Sarah Johnson",
+        "date_of_birth": "1978-03-14",
+        "member_id": "UHC-8821045",
+        "provider_name": "Dr. Robert Jacobson",
+        "provider_npi": "1679576722",
+        "facility_name": "Northwestern Medical Group",
+        "diagnosis_code": [
+          "E11.65"
+        ],
+        "diagnosis_description": [
+          "Type 2 Diabetes Mellitus with diabetic chronic kidney disease, stage 3"
+        ],
+        "treatment_requested": "Jardiance (Empagliflozin) 10mg tablet, once daily",
+        "cpt_code": [
+          "99213"
+        ],
+        "payor": "UnitedHealthcare",
+        "plan_name": "UnitedHealthcare Gold PPO",
+        "approval_status": "Pending",
+        "approval_date": null,
+        "denial_reason": null,
+        "authorization_number": null,
+        "notes": "Patient has failed metformin therapy over 6 months. Requesting cardioprotective agent per ADA 2024 guidelines.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "1679576722",
+          "submitted_name": "Dr. Robert Jacobson",
+          "status": "name_mismatch",
+          "registry_name": "DAVID A WIEBE M.D.",
+          "registry_specialty": "Orthopaedic Surgery",
+          "registry_state": "NE",
+          "registry_city": "KEARNEY",
+          "entity_type": "Individual",
+          "name_match": false,
+          "message": "Name mismatch: CMS registry shows 'DAVID A WIEBE M.D.' (Orthopaedic Surgery, NE)"
+        },
+        "icd10_verification": [
+          {
+            "code": "E11.65",
+            "extracted_description": "Type 2 Diabetes Mellitus with diabetic chronic kidney disease, stage 3",
+            "status": "valid",
+            "official_description": "Type 2 diabetes mellitus with hyperglycemia",
+            "description_match": true,
+            "message": "Valid ICD-10 code \u00b7 Type 2 diabetes mellitus with hyperglycemia \u00b7 Description matches \u2713"
+          }
+        ],
+        "drug_verification": {
+          "searched_name": "10mg",
+          "status": "found",
+          "fda_brand": "NASAL DECONGESTANT PE 10mg",
+          "generic_name": "PHENYLPHRINE HCL",
+          "manufacturer": "YYBA CORP",
+          "route": "ORAL",
+          "message": "Drug verified in FDA database \u00b7 NASAL DECONGESTANT PE 10mg"
+        }
+      },
+      "parse_s": 0.9
+    }
+  ]
+}

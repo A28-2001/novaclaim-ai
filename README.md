@@ -37,12 +37,83 @@ Prior authorization documents are dense, inconsistently formatted, and time-cons
 
 - **Completeness scoring** — measures how much required information is present across clinical and administrative fields
 - **Field extraction** — pulls patient info, diagnosis codes, procedure codes, prescribing physician, NPI, drug details, dates, and insurance data
-- **ML-powered denial predictor** (`denial_predictor.py`) — Logistic Regression + Random Forest ensemble trained on historical records; falls back to rule-based scoring when data is insufficient
+- **ML denial modelling** (`analysis.ipynb`, `denial_predictor.py`) — Logistic Regression + Random Forest ensemble trained and evaluated in the notebook, packaged in `denial_predictor.py`; not yet wired into the live app (see [Limitations](#limitations-and-next-steps))
 - **EDA notebook** (`analysis.ipynb`) — approval rate analysis, payor benchmarking, feature importance, ROC curves, and key operational insights
-- **Risk assessment** — scores the likelihood of denial based on document completeness and field patterns
+- **Risk assessment** (`risk_scorer.py`) — rule-based 0–100 approval-likelihood score from five weighted signals: completeness, validation, agent verification, coverage, and payer history
 - **Manual vs. AI comparison** — side-by-side view showing time and cost savings over traditional review
 - **Persistent history** — all parsed documents are logged in a local SQLite database with full audit trail
 - **Analytics dashboard** — approval rates, average completeness, processing history, and trends over time
+
+---
+
+## Evaluation
+
+<!-- EVAL:START -->
+_Last run 2026-10-05 · model `openai/gpt-oss-20b` · reproduce with `python evaluate.py`_
+
+Extraction was scored against hand labels on **12 synthetic prior authorization documents** (8 full-length forms, 1 of them a PDF, and 4 short forms) across **14 fields**, 168 field instances in total. Labels and labeling rules are in [`eval/ground_truth.json`](eval/ground_truth.json).
+
+| Metric | Result |
+|---|---|
+| Field-level accuracy | **100.0%** (168 / 168) |
+| Recall on fields present in the document | 100.0% |
+| Hallucination rate on fields absent from the document | 0.0% (0 / 9) |
+| Documents parsed successfully | 12 / 12 |
+| Documents with every field correct | 12 / 12 |
+| Median extraction time (one LLM call) | 1.0 s (max 11.1 s) |
+| Median end-to-end time (extraction + 4 agents) | 1.8 s (max 11.9 s) |
+| Field accuracy, full-form documents | 100.0% |
+| Field accuracy, short-form documents | 100.0% |
+
+<details><summary>Per-field accuracy</summary>
+
+| Field | Correct | Accuracy |
+|---|---|---|
+| Patient name | 12 / 12 | 100% |
+| Date of birth | 12 / 12 | 100% |
+| Member ID | 12 / 12 | 100% |
+| Provider name | 12 / 12 | 100% |
+| Provider NPI | 12 / 12 | 100% |
+| Facility | 12 / 12 | 100% |
+| ICD-10 code(s) | 12 / 12 | 100% |
+| Treatment requested | 12 / 12 | 100% |
+| CPT code(s) | 12 / 12 | 100% |
+| Payer | 12 / 12 | 100% |
+| Plan name | 12 / 12 | 100% |
+| Decision status | 12 / 12 | 100% |
+| Decision date | 12 / 12 | 100% |
+| Authorization number | 12 / 12 | 100% |
+
+</details>
+
+Every labeled field was extracted correctly on this run.
+
+**How it's scored.** A field counts as correct when it matches the label under a rule for its type: names ignore honorifics and middle initials, organizations ignore spacing and punctuation, IDs and NPIs must match exactly, dates are compared after normalizing the format, and ICD-10/CPT codes must match as an exact set. Where a field is absent from the document, the only correct answer is to return nothing. Filling it in counts as a hallucination. Full rules are in the docstring of [`evaluate.py`](evaluate.py).
+
+**Read these numbers as an upper bound.** The documents are synthetic, cleanly formatted, and the same ones the extraction prompt was developed against. Real payer forms (scanned faxes, inconsistent layouts, handwriting) will score lower. LLM output also varies slightly between runs.
+<!-- EVAL:END -->
+
+---
+
+## Limitations and next steps
+
+NovaClaim AI is a portfolio prototype. It has only been run on synthetic documents and must not be used with real patient data.
+
+- **Synthetic documents only.** Every test document and in-app sample is synthetic, cleanly formatted, and was available while the extraction prompt was written. The accuracy above is an optimistic upper bound, not an estimate of performance on real payer forms.
+- **No OCR.** PDFs are read through PyPDF2's text layer. Scanned or faxed forms, which are common in prior authorization, return no text and fail to parse.
+- **The denial-risk score in the app is rule-based.** `risk_scorer.py` combines five weighted signals into a 0–100 score. The Logistic Regression and Random Forest models are trained and evaluated in `analysis.ipynb` on synthetic data. `denial_predictor.py` packages that ensemble but isn't wired into the app yet, because predicting denials meaningfully needs real, labeled payer outcomes.
+- **Coverage check uses a reference list, not payer policy.** The CPT agent checks codes against an embedded list of procedures that commonly require prior authorization, plus NLM's public procedure lookup. It does not query any specific payer's current rules.
+- **Confidence badges are self-reported.** The high/medium/low confidence on each field is the LLM's own judgment, not a calibrated probability.
+- **Not HIPAA-ready.** Document text is sent to a third-party LLM API (Groq) with no business associate agreement, and records are stored unencrypted in SQLite. On Streamlit Community Cloud that storage also resets whenever the container restarts.
+
+**Next steps**
+
+1. **Portal submission.** Turn a validated extraction into a submitted request rather than a report. The target is the FHIR-based Prior Authorization API that CMS-0057-F requires Medicare Advantage, Medicaid, CHIP and federal Marketplace plans to support from January 2027 (HL7 Da Vinci PAS), with X12 278 for payers not yet on FHIR.
+2. **A harder evaluation set:** de-identified real forms, scanned and faxed variants, and per-field precision and recall tracked across prompt and model changes.
+3. **OCR** for image-only PDFs.
+4. **Wire in the ML denial model** once real labeled outcomes exist, and compare it against the rule-based scorer on the same holdout set.
+5. **Payer-specific coverage rules** in place of the embedded CPT list.
+6. **HIPAA-grade deployment:** BAA-covered model hosting, encryption at rest, authentication and audit logging.
 
 ---
 
@@ -53,7 +124,7 @@ Prior authorization documents are dense, inconsistently formatted, and time-cons
 | Language | Python 3.11 |
 | Frontend / UI | Streamlit |
 | AI / LLM | Groq API (`openai/gpt-oss-20b`, configurable via `GROQ_MODEL`) |
-| NLP / text extraction | PyMuPDF, regex, structured prompt engineering |
+| NLP / text extraction | PyPDF2, regex, structured prompt engineering |
 | Data manipulation | Pandas |
 | Data visualization | Matplotlib, Seaborn, Plotly, Streamlit native charts |
 | Machine learning | Scikit-learn — Logistic Regression, Random Forest, Pipeline, cross_val_score, ROC-AUC |
@@ -71,8 +142,8 @@ Prior authorization documents are dense, inconsistently formatted, and time-cons
 ## Run Locally
 
 ```bash
-git clone git@github.com:<your-username>/prior-authorization-document-parser.git
-cd prior-authorization-document-parser
+git clone https://github.com/A28-2001/novaclaim-ai.git
+cd novaclaim-ai
 pip install -r requirements.txt
 ```
 
@@ -88,6 +159,13 @@ Then run:
 
 ```bash
 streamlit run Home.py
+```
+
+To re-run the accuracy evaluation (12 labeled documents, a few minutes):
+
+```bash
+python evaluate.py            # add --no-agents to time extraction only
+python evaluate.py --self-test   # checks the scorer itself, no API calls
 ```
 
 ---
@@ -118,6 +196,12 @@ Never commit `.streamlit/secrets.toml` — it is excluded via `.gitignore`.
 ├── coverage_agent.py        # CPT coverage checker (Agent 2)
 ├── appeal_agent.py          # Appeal letter generator (Agent 3)
 ├── database.py              # SQLite ORM + SQL analytics queries
+├── demo_data.py             # Seeds fresh deploys with real parsed samples; labeled demo rows
+├── evaluate.py              # Field-level extraction accuracy on the labeled test set
+├── eval/
+│   ├── ground_truth.json    # Hand labels + labeling rules for 12 synthetic documents
+│   ├── results.json         # Latest evaluation metrics and every miss
+│   └── parsed_outputs.json  # Real parser outputs from the latest evaluation run
 ├── analysis.ipynb           # EDA notebook — approval analysis, ML evaluation
 ├── .streamlit/
 │   └── secrets.toml         # Local secrets (gitignored)

@@ -6,6 +6,10 @@ from database import get_all_records, init_db
 
 init_db()
 
+# Visitors can land on this page directly, so seed here too (no-op if already done).
+from demo_data import seed_sample_outputs
+seed_sample_outputs()
+
 st.set_page_config(page_title="History", page_icon="📁", layout="wide")
 
 st.title("📁 History & Export")

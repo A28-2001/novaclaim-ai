@@ -16,6 +16,10 @@ from database import (
 
 init_db()
 
+# Visitors can land on this page directly, so seed here too (no-op if already done).
+from demo_data import seed_sample_outputs
+seed_sample_outputs()
+
 st.set_page_config(page_title="Analytics · NovaClaim AI", page_icon="📊", layout="wide")
 
 # ── Color tokens ───────────────────────────────────────────────────────────────
@@ -175,7 +179,7 @@ if not total:
             st.success(f"Loaded {n} sample documents.")
             st.rerun()
         st.caption(
-            "Sample records are clearly labelled and can be cleared at any time "
+            "Sample records are clearly labeled and can be cleared at any time "
             "from the sidebar."
         )
     st.stop()
@@ -195,6 +199,26 @@ if demo_records_present():
     with _b2:
         if st.button("Clear demo data", use_container_width=True):
             n = clear_demo_data()
+            st.cache_data.clear()
+            st.rerun()
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+elif total < 15:
+    # A handful of real documents makes for thin charts (payer benchmarking needs
+    # 2+ per payer). Offer the labeled sample set without hiding real data.
+    _s1, _s2 = st.columns([4, 1.3])
+    with _s1:
+        st.markdown(
+            f'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #4f46e5;'
+            f'border-radius:10px;padding:9px 14px;font-size:0.8rem;color:#1e40af">'
+            f'<strong>{total} document{"s" if total != 1 else ""} so far.</strong> Trends and payer '
+            f'comparisons fill in with more volume. Load 26 labeled sample records to see the '
+            f'full dashboard. They can be cleared at any time.</div>',
+            unsafe_allow_html=True,
+        )
+    with _s2:
+        if st.button("Load sample records", use_container_width=True):
+            from demo_data import seed_demo_data
+            seed_demo_data()
             st.cache_data.clear()
             st.rerun()
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)

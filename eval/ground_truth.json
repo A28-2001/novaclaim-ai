@@ -1,0 +1,260 @@
+{
+  "description": "Hand-labeled ground truth for NovaClaim AI's synthetic prior authorization test set. All documents are synthetic: names, member IDs, NPIs and authorization numbers are invented. null means the field is not present in the document, and the correct extraction is to return nothing.",
+  "labeling_rules": [
+    "approval_date is the payer's decision date, matching the parser prompt ('Decision date'). Denied documents use their Decision Date. It is null when no decision has been made (Pending, or 'Decision Date: N/A').",
+    "The request date ('DATE OF REQUEST' / 'Date:') is never the approval_date. Extracting it there counts as a hallucination.",
+    "authorization_number is null for denied and pending requests. 'Group Number' is not an authorization number.",
+    "provider_npi is the individual provider's NPI. test_real_npi.txt also lists a Facility NPI as a deliberate distractor.",
+    "Short-form documents combine payer and plan into one 'Insurance Plan' line. They are labeled as payer = carrier name and plan_name = the remainder (e.g. 'Cigna Open Access Plus' -> payor 'Cigna', plan 'Open Access Plus').",
+    "Honorifics and credentials (Dr., MD) are not part of provider_name."
+  ],
+  "fields": [
+    "patient_name", "date_of_birth", "member_id", "provider_name", "provider_npi",
+    "facility_name", "diagnosis_code", "treatment_requested", "cpt_code", "payor",
+    "plan_name", "approval_status", "approval_date", "authorization_number"
+  ],
+  "documents": [
+    {
+      "file": "sample.txt",
+      "form": "full",
+      "labels": {
+        "patient_name": "Maria Elena Gonzalez",
+        "date_of_birth": "1978-04-15",
+        "member_id": "BCB-774920183",
+        "provider_name": "James R. Hartwell",
+        "provider_npi": "1234567890",
+        "facility_name": "Northwestern Memorial Hospital",
+        "diagnosis_code": ["C50.411", "I97.2"],
+        "treatment_requested": "Pertuzumab (Perjeta) 420mg IV infusion, 6 cycles",
+        "cpt_code": ["96413"],
+        "payor": "BlueCross BlueShield of Illinois",
+        "plan_name": "PPO Gold 500",
+        "approval_status": "Approved",
+        "approval_date": "2024-11-07",
+        "authorization_number": "AUTH-2024-00448821"
+      }
+    },
+    {
+      "file": "sample.pdf",
+      "form": "full",
+      "notes": "PDF rendering of sample.txt. Included to exercise the PDF text-extraction path; same labels.",
+      "labels": {
+        "patient_name": "Maria Elena Gonzalez",
+        "date_of_birth": "1978-04-15",
+        "member_id": "BCB-774920183",
+        "provider_name": "James R. Hartwell",
+        "provider_npi": "1234567890",
+        "facility_name": "Northwestern Memorial Hospital",
+        "diagnosis_code": ["C50.411", "I97.2"],
+        "treatment_requested": "Pertuzumab (Perjeta) 420mg IV infusion, 6 cycles",
+        "cpt_code": ["96413"],
+        "payor": "BlueCross BlueShield of Illinois",
+        "plan_name": "PPO Gold 500",
+        "approval_status": "Approved",
+        "approval_date": "2024-11-07",
+        "authorization_number": "AUTH-2024-00448821"
+      }
+    },
+    {
+      "file": "sample_approved_insulin.txt",
+      "form": "full",
+      "labels": {
+        "patient_name": "David A. Thornton",
+        "date_of_birth": "1958-11-03",
+        "member_id": "UHC-882047391",
+        "provider_name": "Patricia M. Ellison",
+        "provider_npi": "3456789012",
+        "facility_name": "Indiana University Health Methodist Hospital",
+        "diagnosis_code": ["E11.65"],
+        "treatment_requested": "Insulin pump (Medtronic MiniMed 780G) with continuous glucose monitoring",
+        "cpt_code": ["95249"],
+        "payor": "UnitedHealthcare",
+        "plan_name": "Choice Plus PPO",
+        "approval_status": "Approved",
+        "approval_date": "2024-09-17",
+        "authorization_number": "AUTH-2024-00551204"
+      }
+    },
+    {
+      "file": "sample_approved_tms.txt",
+      "form": "full",
+      "labels": {
+        "patient_name": "Sarah J. Whitfield",
+        "date_of_birth": "1990-08-18",
+        "member_id": "ANT-773920041",
+        "provider_name": "Marcus D. Greene",
+        "provider_npi": "2345678901",
+        "facility_name": "OhioHealth Riverside Methodist Hospital",
+        "diagnosis_code": ["F33.2"],
+        "treatment_requested": "Transcranial Magnetic Stimulation (TMS) therapy, 36 sessions",
+        "cpt_code": ["90867"],
+        "payor": "Anthem Blue Cross Blue Shield",
+        "plan_name": "BlueAccess PPO",
+        "approval_status": "Approved",
+        "approval_date": "2024-08-29",
+        "authorization_number": "AUTH-2024-00389147"
+      }
+    },
+    {
+      "file": "sample_denied.txt",
+      "form": "full",
+      "labels": {
+        "patient_name": "Robert D. Kessler",
+        "date_of_birth": "1965-08-22",
+        "member_id": "AET-330481920",
+        "provider_name": "Sandra L. Cho",
+        "provider_npi": "9876543210",
+        "facility_name": "Rush University Medical Center",
+        "diagnosis_code": ["M17.12"],
+        "treatment_requested": "Total left knee arthroplasty (TKA)",
+        "cpt_code": ["27447"],
+        "payor": "Aetna Health Plans",
+        "plan_name": "HMO Select 1000",
+        "approval_status": "Denied",
+        "approval_date": "2024-10-22",
+        "authorization_number": null
+      }
+    },
+    {
+      "file": "sample_denied_gallbladder.txt",
+      "form": "full",
+      "labels": {
+        "patient_name": "Carlos M. Reyes",
+        "date_of_birth": "1974-02-07",
+        "member_id": "MOL-441038822",
+        "provider_name": "Linda H. Tran",
+        "provider_npi": "8901234567",
+        "facility_name": "Cedars-Sinai Medical Center",
+        "diagnosis_code": ["K80.10"],
+        "treatment_requested": "Laparoscopic cholecystectomy",
+        "cpt_code": ["47562"],
+        "payor": "Molina Healthcare",
+        "plan_name": "Marketplace Silver 70",
+        "approval_status": "Denied",
+        "approval_date": "2024-10-11",
+        "authorization_number": null
+      }
+    },
+    {
+      "file": "sample_denied_mri.txt",
+      "form": "full",
+      "labels": {
+        "patient_name": "Angela R. Foster",
+        "date_of_birth": "1982-06-14",
+        "member_id": "CIG-558204817",
+        "provider_name": "Kevin B. Okafor",
+        "provider_npi": "5678901234",
+        "facility_name": "UCHealth University of Colorado Hospital",
+        "diagnosis_code": ["M54.42"],
+        "treatment_requested": "MRI lumbar spine without contrast",
+        "cpt_code": ["72148"],
+        "payor": "Cigna Health and Life Insurance",
+        "plan_name": "Open Access Plus",
+        "approval_status": "Denied",
+        "approval_date": "2024-11-01",
+        "authorization_number": null
+      }
+    },
+    {
+      "file": "sample_pending_chemo.txt",
+      "form": "full",
+      "labels": {
+        "patient_name": "Thomas W. Nakamura",
+        "date_of_birth": "1951-03-29",
+        "member_id": "HUM-109384720",
+        "provider_name": "Rachel S. Patel",
+        "provider_npi": "7890123456",
+        "facility_name": "Emory University Hospital",
+        "diagnosis_code": ["C34.11", "C77.1"],
+        "treatment_requested": "Pembrolizumab (Keytruda) 200mg IV every 3 weeks, 4 cycles",
+        "cpt_code": ["96413"],
+        "payor": "Humana",
+        "plan_name": "Gold Plus HMO",
+        "approval_status": "Pending",
+        "approval_date": null,
+        "authorization_number": null
+      }
+    },
+    {
+      "file": "test_bad_npi.txt",
+      "form": "short",
+      "labels": {
+        "patient_name": "James Thornton",
+        "date_of_birth": "1980-07-19",
+        "member_id": "CIG-3381027",
+        "provider_name": "Michael Sterling",
+        "provider_npi": "1234567890",
+        "facility_name": "Riverside General Hospital",
+        "diagnosis_code": ["F41.1"],
+        "treatment_requested": "Escitalopram 10mg tablet once daily",
+        "cpt_code": ["90837"],
+        "payor": "Cigna",
+        "plan_name": "Open Access Plus",
+        "approval_status": "Pending",
+        "approval_date": null,
+        "authorization_number": null
+      }
+    },
+    {
+      "file": "test_drug_lookup.txt",
+      "form": "short",
+      "labels": {
+        "patient_name": "Dorothy Kim",
+        "date_of_birth": "1952-11-30",
+        "member_id": "AET-7723900",
+        "provider_name": "Samuel Okafor",
+        "provider_npi": "1134152443",
+        "facility_name": "Heartland Cardiology Associates",
+        "diagnosis_code": ["I10"],
+        "treatment_requested": "Lisinopril 10mg tablet once daily for blood pressure management",
+        "cpt_code": ["99214"],
+        "payor": "Aetna",
+        "plan_name": "Medicare Advantage",
+        "approval_status": "Approved",
+        "approval_date": "2026-06-18",
+        "authorization_number": "AUTH-2026-091004"
+      }
+    },
+    {
+      "file": "test_icd10_codes.txt",
+      "form": "short",
+      "labels": {
+        "patient_name": "Marcus Rivera",
+        "date_of_birth": "1965-09-02",
+        "member_id": "BCBS-4490128",
+        "provider_name": "Angela Chen",
+        "provider_npi": "1457471942",
+        "facility_name": "Pacific Coast Oncology Center",
+        "diagnosis_code": ["C50.411", "C79.51"],
+        "treatment_requested": "Trastuzumab (Herceptin) 6mg/kg IV infusion every 21 days",
+        "cpt_code": ["96413"],
+        "payor": "Blue Cross Blue Shield",
+        "plan_name": "PPO Platinum",
+        "approval_status": "Approved",
+        "approval_date": "2026-06-15",
+        "authorization_number": "AUTH-2026-088821"
+      }
+    },
+    {
+      "file": "test_real_npi.txt",
+      "form": "short",
+      "notes": "Contains a Facility NPI (1003800586) as a distractor for provider_npi.",
+      "labels": {
+        "patient_name": "Sarah Johnson",
+        "date_of_birth": "1978-03-14",
+        "member_id": "UHC-8821045",
+        "provider_name": "Robert Jacobson",
+        "provider_npi": "1679576722",
+        "facility_name": "Northwestern Medical Group",
+        "diagnosis_code": ["E11.65"],
+        "treatment_requested": "Jardiance (Empagliflozin) 10mg tablet, once daily",
+        "cpt_code": ["99213"],
+        "payor": "UnitedHealthcare",
+        "plan_name": "Gold PPO",
+        "approval_status": "Pending",
+        "approval_date": null,
+        "authorization_number": null
+      }
+    }
+  ]
+}
