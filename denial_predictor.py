@@ -12,12 +12,14 @@ Features (all derivable from a parsed document, no external APIs needed):
   has_npi               — provider NPI present (0/1)
   has_cpt               — CPT procedure code present (0/1)
   has_diagnosis         — ICD-10 diagnosis code present (0/1)
-  has_auth_number       — authorization number present (0/1)
   has_member_id         — insurance member ID present (0/1)
   has_facility          — facility name present (0/1)
   validation_errors     — count of hard validation errors
   validation_warnings   — count of validation warnings
   payor_approval_rate   — historical approval rate for this payor (0.0–1.0)
+
+Excluded on purpose: authorization_number. Payors issue it only after they
+approve a request, so using it as a feature would leak the outcome.
 
 Target: binary — 1 = Denied, 0 = Approved
 (Pending records are excluded from training; predicted at inference time)
@@ -65,7 +67,6 @@ FEATURE_NAMES = [
     "has_npi",
     "has_cpt",
     "has_diagnosis",
-    "has_auth_number",
     "has_member_id",
     "has_facility",
     "validation_errors",
@@ -89,7 +90,6 @@ def extract_features(row: dict, payor_rate_map: dict) -> dict:
         "has_npi":             1 if row.get("provider_npi") else 0,
         "has_cpt":             1 if row.get("cpt_code") else 0,
         "has_diagnosis":       1 if row.get("diagnosis_code") else 0,
-        "has_auth_number":     1 if row.get("authorization_number") else 0,
         "has_member_id":       1 if row.get("member_id") else 0,
         "has_facility":        1 if row.get("facility_name") else 0,
         "validation_errors":   int(row.get("validation_errors", 0) or 0),
