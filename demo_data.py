@@ -44,7 +44,7 @@ _TREATMENTS = [
 ]
 
 _DENIAL_REASONS = [
-    "Step therapy requirement not met — formulary alternative not attempted",
+    "Step therapy requirement not met: formulary alternative not attempted",
     "Medical necessity not established from submitted documentation",
     "Missing supporting clinical documentation",
     "Service not covered under current plan benefits",
@@ -91,7 +91,7 @@ def _build_records(n: int = 26) -> list[dict]:
             status = "Denied"
             denial_reason = _DENIAL_REASONS[i % len(_DENIAL_REASONS)]
 
-        # Denied records are more often missing fields — that correlation is what
+        # Denied records are more often missing fields: that correlation is what
         # the ML denial predictor learns, so the demo data must reflect it.
         missing_npi  = (status == "Denied" and i % 3 == 0)
         missing_auth = (status != "Approved")
@@ -115,7 +115,7 @@ def _build_records(n: int = 26) -> list[dict]:
             "approval_date":         None if status == "Pending" else (parsed_at + timedelta(days=3)).strftime("%Y-%m-%d"),
             "denial_reason":         denial_reason,
             "authorization_number":  None if missing_auth else f"AUTH-{7000000 + i * 991}",
-            "notes":                 "Demo record — generated to populate the analytics dashboard.",
+            "notes":                 "Demo record, generated to populate the analytics dashboard.",
             "validation_errors":     1 if missing_npi else 0,
             "validation_warnings":   1 if missing_auth else 0,
         })
@@ -228,7 +228,7 @@ def load_eval_summary(results_path: str = EVAL_RESULTS_PATH) -> dict | None:
 
 def seed_demo_data(db_path: str = DB_PATH, n: int = 26) -> int:
     """
-    Insert demo records. Idempotent — does nothing if demo rows already exist.
+    Insert demo records. Idempotent: does nothing if demo rows already exist.
     Returns the number of records inserted.
     """
     if demo_records_present(db_path):

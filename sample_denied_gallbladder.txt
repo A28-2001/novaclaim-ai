@@ -18,7 +18,7 @@ Phone: (213) 555-0892
 REQUESTING PROVIDER
 -------------------
 Provider Name: Dr. Linda H. Tran, MD
-NPI: 8901234567
+NPI: 1812345670
 Specialty: General Surgery
 Facility: Cedars-Sinai Medical Center
 Facility Address: 8700 Beverly Blvd, Los Angeles, CA 90048

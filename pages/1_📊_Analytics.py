@@ -20,7 +20,12 @@ init_db()
 from demo_data import seed_sample_outputs
 seed_sample_outputs()
 
-st.set_page_config(page_title="Analytics · NovaClaim AI", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Analytics · NovaClaim AI", page_icon="📊", layout="wide",
+                   initial_sidebar_state="collapsed")
+try:
+    st.page_link("Home.py", label="Back to NovaClaim", icon="⬅️")
+except Exception:
+    st.markdown("[⬅️ Back to NovaClaim](/)")
 
 # ── Color tokens ───────────────────────────────────────────────────────────────
 TEAL   = "#1D9E75"
@@ -32,11 +37,12 @@ INDIGO = "#4f46e5"
 
 STATUS_COLORS = {"Approved": FOREST, "Denied": RED, "Pending": AMBER, "Unknown": SLATE}
 
-# ── Minimal CSS (no pseudo-elements / CSS vars — they break st.markdown) ───────
+# ── Minimal CSS (no pseudo-elements / CSS vars: they break st.markdown) ───────
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-body, .stApp { font-family: 'Inter', sans-serif !important; background: #f7f8fc !important; }
+body, .stApp { font-family: 'Inter', sans-serif; background: #FBFAF7; }
+[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -49,7 +55,7 @@ LAYOUT = dict(
 M = dict(t=10, b=10, l=10, r=10)
 
 
-# ── Cached data loaders — DB only queried once per 5-min window ───────────────
+# ── Cached data loaders: DB only queried once per 5-min window ───────────────
 @st.cache_data(ttl=300, show_spinner=False)
 def load_summary(cutoff):
     return get_summary_stats(cutoff)
@@ -85,17 +91,14 @@ def load_agent(cutoff):
 
 # ── Inline style helpers ───────────────────────────────────────────────────────
 def chart_open(title, subtitle=""):
-    t = f'<div style="font-size:0.95rem;font-weight:800;color:#0f172a;margin-bottom:4px">{title}</div>'
-    s = f'<div style="font-size:0.78rem;color:#475569;margin-bottom:14px">{subtitle}</div>' if subtitle else ""
-    st.markdown(
-        '<div style="background:white;border:1px solid #e2e8f0;border-radius:20px;'
-        'padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.04);margin-bottom:20px">'
-        + t + s,
-        unsafe_allow_html=True,
-    )
+    # Each st.markdown call is rendered on its own, so a <div> can't be opened here
+    # and closed later around a chart. Render the heading as a complete block.
+    t = f'<div style="font-size:0.95rem;font-weight:800;color:#0f172a;margin:18px 0 4px">{title}</div>'
+    s = f'<div style="font-size:0.78rem;color:#475569;margin-bottom:10px">{subtitle}</div>' if subtitle else ""
+    st.markdown(t + s, unsafe_allow_html=True)
 
 def chart_close():
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('<div style="height:1px;background:#E7E3DA;margin:18px 0 6px"></div>', unsafe_allow_html=True)
 
 def kpi(label, value, accent, sub=""):
     sub_html = f'<div style="font-size:0.7rem;font-weight:600;color:{accent};margin-top:6px">{sub}</div>' if sub else ""
@@ -131,7 +134,8 @@ with hdr_col:
       <div style="font-size:1.6rem;font-weight:900;color:white;margin-bottom:6px">
         📊 Analytics Dashboard</div>
       <div style="font-size:0.85rem;color:#94a3b8">
-        SQL-aggregated insights · scales to any document volume</div>
+        SQL aggregations over the evaluated sample documents (and the labeled demo set, if loaded).
+        Visitor uploads are never stored.</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -162,8 +166,8 @@ if not total:
       <div style="font-size:0.87rem;color:#475569;line-height:1.7;max-width:520px;margin:0 auto">
         The charts below track approval rates, payor performance, denial reasons and
         processing trends across every document this app has analyzed.<br><br>
-        Load a demo dataset to see it working, or head to
-        <strong>Home</strong> and parse a document of your own.
+        Load a demo dataset to see it working. Visitor uploads on the Home page are kept
+        in the visitor's own session and aren't stored here.
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -171,7 +175,7 @@ if not total:
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
     _c1, _c2, _c3 = st.columns([1, 1.4, 1])
     with _c2:
-        if st.button("📈  Load 26 sample documents", type="primary", use_container_width=True):
+        if st.button("📈  Load 26 sample documents", type="primary", width="stretch"):
             from demo_data import seed_demo_data
             with st.spinner("Populating dashboard…"):
                 n = seed_demo_data()
@@ -180,7 +184,7 @@ if not total:
             st.rerun()
         st.caption(
             "Sample records are clearly labeled and can be cleared at any time "
-            "from the sidebar."
+            "with the button that appears above the charts."
         )
     st.stop()
 
@@ -193,11 +197,11 @@ if demo_records_present():
             '<div style="background:#fffbeb;border:1px solid #fcd34d;border-left:4px solid #BA7517;'
             'border-radius:10px;padding:9px 14px;font-size:0.8rem;color:#92400e">'
             '<strong>Demo data loaded.</strong> These charts include sample records so you can '
-            'see the dashboard populated. Your own parsed documents appear here too.</div>',
+            'see the dashboard populated, alongside the evaluation\'s real sample parses.</div>',
             unsafe_allow_html=True,
         )
     with _b2:
-        if st.button("Clear demo data", use_container_width=True):
+        if st.button("Clear demo data", width="stretch"):
             n = clear_demo_data()
             st.cache_data.clear()
             st.rerun()
@@ -216,7 +220,7 @@ elif total < 15:
             unsafe_allow_html=True,
         )
     with _s2:
-        if st.button("Load sample records", use_container_width=True):
+        if st.button("Load sample records", width="stretch"):
             from demo_data import seed_demo_data
             seed_demo_data()
             st.cache_data.clear()
@@ -260,7 +264,7 @@ with c1:
             margin=dict(t=20, b=20, l=20, r=20),
             **LAYOUT,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         empty_state("No status data.")
     chart_close()
@@ -268,7 +272,7 @@ with c1:
 with c2:
     weekly_data = load_weekly(cutoff_iso)
     if len(weekly_data) >= 2:
-        chart_open("Approval Rate Trend", "Weekly approval % — is performance improving?")
+        chart_open("Approval Rate Trend", "Weekly approval %. Is performance improving?")
         df_w = pd.DataFrame(weekly_data)
         df_w["rate"] = df_w.apply(lambda r: round(r["approved"] / r["total"] * 100, 1) if r["total"] else 0, axis=1)
         fig = go.Figure()
@@ -280,9 +284,6 @@ with c2:
             fill="tozeroy", fillcolor="rgba(29,158,117,0.1)",
             hovertemplate="<b>%{x}</b><br>Approval: %{y}%<extra></extra>",
         ))
-        fig.add_hline(y=80, line_dash="dot", line_color=AMBER, line_width=1.5,
-                      annotation_text="80% target", annotation_font_color=AMBER,
-                      annotation_font_size=11)
         fig.update_layout(
             height=300,
             xaxis=dict(gridcolor="#f1f5f9", title="", tickfont=dict(color="#0f172a")),
@@ -290,7 +291,7 @@ with c2:
                        range=[0, 105], ticksuffix="%"),
             showlegend=False, margin=M, **LAYOUT,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         chart_close()
     else:
         chart_open("Documents Over Time", "Daily volume of prior auth documents processed")
@@ -310,7 +311,7 @@ with c2:
                 yaxis=dict(gridcolor="#f1f5f9", title="Documents", tickfont=dict(color="#0f172a")),
                 showlegend=False, margin=M, **LAYOUT,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             empty_state("Parse documents across multiple sessions to see the trend.")
         chart_close()
@@ -320,7 +321,7 @@ divider()
 # ── Payor approval rate % ──────────────────────────────────────────────────────
 chart_open(
     "Payor Approval Rate",
-    "Approval % per insurer (min 2 docs) · green ≥70% · amber 40–70% · red <40%",
+    "Approval % per insurer (min 2 docs) ",
 )
 payor_data = load_payors(cutoff_iso)
 if payor_data:
@@ -338,9 +339,6 @@ if payor_data:
         textfont=dict(color="#0f172a", size=11, family="Inter"),
         hovertemplate="<b>%{y}</b><br>Approval: %{x}%<extra></extra>",
     ))
-    fig.add_vline(x=70, line_dash="dot", line_color=AMBER, line_width=1.5,
-                  annotation_text="70% benchmark", annotation_font_color=AMBER,
-                  annotation_font_size=11)
     fig.update_layout(
         height=max(280, len(df_p) * 42),
         xaxis=dict(gridcolor="#f1f5f9", range=[0, 120], ticksuffix="%",
@@ -348,7 +346,7 @@ if payor_data:
         yaxis=dict(gridcolor="rgba(0,0,0,0)", tickfont=dict(color="#0f172a", size=11)),
         margin=dict(t=10, b=10, l=10, r=130), **LAYOUT,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 else:
     empty_state("Need at least 2 documents per payor. Upload more documents.")
 chart_close()
@@ -376,13 +374,13 @@ with c3:
             yaxis=dict(gridcolor="rgba(0,0,0,0)", tickfont=dict(color="#0f172a", size=11)),
             margin=dict(t=10, b=10, l=10, r=40), **LAYOUT,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         empty_state("No diagnosis code data yet.")
     chart_close()
 
 with c4:
-    chart_open("Top Denial Reasons", "Grouped by theme — drives appeal strategy")
+    chart_open("Top Denial Reasons", "Grouped by theme to guide appeal strategy")
 
     CLUSTERS = {
         "Medical Necessity":  ["medical nec", "medically nec", "not medically"],
@@ -432,7 +430,7 @@ with c4:
             yaxis=dict(gridcolor="rgba(0,0,0,0)", tickfont=dict(color="#0f172a", size=11)),
             margin=dict(t=10, b=10, l=10, r=40), **LAYOUT,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.markdown("""
         <div style="text-align:center;padding:48px 0">
@@ -454,14 +452,14 @@ docs_with_agent = ag.get("docs_with_agent", 0)
 
 a1, a2, a3, a4 = st.columns(4)
 agent_kpis = [
-    (a1, "NPI Verified",        ag.get("npi_pass",0),   ag.get("npi_total",0),   TEAL,   "provider registry checks"),
+    (a1, "NPI in CMS Registry", ag.get("npi_pass",0),   ag.get("npi_total",0),   TEAL,   "sample NPIs are synthetic, so most aren't"),
     (a2, "ICD-10 Codes Valid",  ag.get("icd_pass",0),   ag.get("icd_total",0),   FOREST, "diagnosis code checks"),
     (a3, "Drugs FDA-Confirmed", ag.get("drug_found",0), ag.get("drug_total",0),  INDIGO, "drug label checks"),
 ]
 for col, label, passed, total_n, accent, sub in agent_kpis:
     with col:
         rate = pct(passed, total_n) if total_n else None
-        val  = f"{rate}%" if rate is not None else "—"
+        val  = f"{rate}%" if rate is not None else "n/a"
         sub2 = f"{passed} of {total_n} {sub}" if total_n else "No data yet"
         bar  = (
             f'<div style="background:#f1f5f9;border-radius:4px;height:5px;margin-top:8px">'

@@ -12,6 +12,7 @@ import time
 # (or Streamlit secret) so a future deprecation is a config change, not a code change.
 # Current Groq model list: https://console.groq.com/docs/models
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
+MAX_DOCUMENT_CHARS = 30000   # a PA request is a few pages; this is ample
 
 
 def get_model() -> str:
@@ -105,13 +106,15 @@ def parse_prior_auth(document_text: str) -> dict:
     Returns a dict with all fields plus a 'confidence' sub-dict.
     """
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    if len(document_text) > MAX_DOCUMENT_CHARS:      # keep long uploads inside the model's budget
+        document_text = document_text[:MAX_DOCUMENT_CHARS] + "\n[...document truncated...]"
 
     prompt = f"""You are a medical document parser specializing in prior authorization (PA) forms.
 
 Extract the following fields from the prior authorization document below.
 Return ONLY a valid JSON object with these exact keys. If a field is not found, use null.
 
-Also include a "confidence" key at the end — for each field, rate your confidence as:
+Also include a "confidence" key at the end. For each field, rate your confidence as:
 - "high"   = field was explicitly and clearly stated in the document
 - "medium" = field was inferred or partially stated
 - "low"    = field was not found or very uncertain
@@ -123,17 +126,20 @@ Fields to extract:
 - provider_name: Requesting physician/provider name
 - provider_npi: Provider NPI number (should be 10 digits)
 - facility_name: Hospital or clinic name
-- diagnosis_code: ICD-10 code(s) — return as a list
-- diagnosis_description: Human-readable diagnosis — return as a list
+- diagnosis_code: ICD-10 code(s), returned as a list
+- diagnosis_description: Human-readable diagnosis, returned as a list
 - treatment_requested: Procedure, medication, or service requested
-- cpt_code: CPT code(s) — return as a list
+- cpt_code: CPT code(s), returned as a list
 - payor: Insurance company name
 - plan_name: Insurance plan name
-- approval_status: Exactly one of — Approved, Denied, Pending, Unknown
+- approval_status: Exactly one of: Approved, Denied, Pending, Unknown
 - approval_date: Decision date (YYYY-MM-DD)
 - denial_reason: Reason for denial if denied, otherwise null
 - authorization_number: Auth number if approved
 - notes: Any other clinically relevant details
+- drug_name: If a medication is requested, its generic name (e.g. "pembrolizumab", "insulin glargine"); null if the request is a procedure, imaging or device
+- prior_treatments: List of treatments the document says were already tried for this condition (medications, therapy sessions, injections, procedures). Empty list if none are documented
+- clinical_justification: One or two sentences summarizing the medical-necessity argument the document makes; null if there is none
 
 Return this exact structure:
 {{
@@ -154,6 +160,9 @@ Return this exact structure:
   "denial_reason": null,
   "authorization_number": "...",
   "notes": "...",
+  "drug_name": null,
+  "prior_treatments": ["..."],
+  "clinical_justification": "...",
   "confidence": {{
     "patient_name": "high",
     "date_of_birth": "high",
@@ -209,7 +218,7 @@ Treatment requested: {treatment or 'Not specified'}
 Diagnosis: {diagnosis or 'Not specified'}
 
 Format your response as exactly 3 numbered points. Each point should be 2-3 sentences.
-Be specific — avoid generic statements."""
+Be specific and avoid generic statements."""
 
     response = _groq_with_retry(
         client,

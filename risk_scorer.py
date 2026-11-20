@@ -1,290 +1,219 @@
 """
-Risk Scorer — Agent 4
-======================
-Predicts prior authorization approval likelihood using five weighted signals:
+Agent 4: Submission Readiness Scorer
+======================================
+Scores how ready a prior authorization request is to submit, from 0 to 100.
 
-  1. Document completeness          (0–20 pts)
-  2. Validation quality             (0–15 pts)
-  3. Agent 1 verification signals   (0–25 pts)  NPI / ICD-10 / Drug
-  4. Coverage policy signal         (0–15 pts)  Agent 2
-  5. Historical payor approval rate (0–25 pts)  from local DB
+This is a checklist, not a prediction. It doesn't estimate whether the payer
+will approve. It measures whether the request contains what reviewers look for,
+and whether its identifiers check out, which is what the submitter can fix
+before sending. It uses only information available at submission time, never
+the decision fields (status, decision date, authorization number), and never
+other documents in the database.
 
-Total: 0–100.  No external API calls — runs instantly on upload.
+  Signal                         Points
+  Required submission details      30   patient, DOB, member ID, payer, plan,
+                                        provider, facility, treatment
+  Provider NPI                     15   check digit (9) + CMS registry (6)
+  Diagnosis codes                  15   valid ICD-10-CM codes (NLM)
+  Procedure code                   10   a CPT or HCPCS code is present and well formed
+  Medical-necessity evidence       30   justification (10) + prior or
+                                        conservative treatment documented (20)
 
-Score bands:
-  75–100  → High Approval Likelihood   (green)
-  50–74   → Moderate Risk              (amber)
-   0–49   → High Denial Risk           (red)
+Blockers cap the result at "Not ready", whatever the total: a missing patient
+name, date of birth, member ID, payer or treatment; a missing or invalid NPI,
+or one registered to a different provider; a missing or invalid diagnosis code;
+a missing procedure code.
+
+  85–100  Ready to submit
+  60–84   Needs attention
+   0–59   Not ready
 """
 
 import json
-import os
-import sqlite3
+import re
 from typing import Optional
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "prior_auth.db")
+from validation_agent import npi_check_digit_ok
 
-REQUIRED_FIELDS = [
-    "patient_name", "date_of_birth", "member_id", "provider_name",
-    "provider_npi", "facility_name", "diagnosis_code", "treatment_requested",
-    "cpt_code", "payor", "plan_name", "approval_status",
+DETAIL_FIELDS = {
+    "patient_name":        "patient name",
+    "date_of_birth":       "date of birth",
+    "member_id":           "member ID",
+    "payor":               "payer",
+    "plan_name":           "plan name",
+    "provider_name":       "provider name",
+    "facility_name":       "facility",
+    "treatment_requested": "treatment requested",
+}
+
+# Missing any of these makes a request unprocessable, whatever else it contains.
+BLOCKING_DETAILS = {"patient_name", "date_of_birth", "member_id", "payor", "treatment_requested"}
+
+# CPT (5 digits, or 4 digits + F/T/U) or HCPCS Level II (letter + 4 digits, e.g. J9271, E0784).
+PROCEDURE_CODE = re.compile(r"^(\d{4}[0-9FTU]|[A-V]\d{4})$")
+
+LEVELS = [
+    (85, "Ready to submit", "#0E9F6E", "#ECFDF5", "#A7F3D0", "✓"),
+    (60, "Needs attention", "#C2770B", "#FFFBEB", "#FDE68A", "!"),
+    (0,  "Not ready",       "#D9363E", "#FEF2F2", "#FECACA", "✕"),
 ]
 
-# ── Coverage status → points mapping ─────────────────────────────────────────
-_COV_PTS = {
-    "not_required":    15,
-    "check_plan":       8,
-    "unknown":          6,
-    "likely_required":  3,
-    "required":         0,
-}
-_COV_ORDER = ["not_required", "check_plan", "unknown", "likely_required", "required"]
+
+def _to_list(val) -> list:
+    if not val:
+        return []
+    if isinstance(val, list):
+        return [str(v).strip() for v in val if v and str(v).strip()]
+    s = str(val).strip()
+    if s.startswith("["):
+        try:
+            parsed = json.loads(s)
+            if isinstance(parsed, list):
+                return [str(v).strip() for v in parsed if v and str(v).strip()]
+        except Exception:
+            pass
+    return [v.strip() for v in s.split(",") if v.strip()]
 
 
-class RiskScorer:
+class ReadinessScorer:
     """
-    Predict approval likelihood for a single prior authorization document.
-
     Usage:
-        scorer = RiskScorer()
-        result = scorer.score(pa_result, agent_res, coverage_res, validation_issues)
-        # result["score"]          — int 0–100
-        # result["level"]          — "High Approval Likelihood" | "Moderate Risk" | "High Denial Risk"
-        # result["factors"]        — list of per-signal dicts
-        # result["recommendation"] — plain-text guidance string
+        ReadinessScorer().score(result, agent_res, coverage_res, issues)
+    Returns score, level, colors, factors (one per signal), fixes (ranked by the
+    points each would recover), blockers and a one-line recommendation.
     """
 
-    def score(
-        self,
-        pa_result:         dict,
-        agent_res:         Optional[dict] = None,
-        coverage_res:      Optional[dict] = None,
-        validation_issues: Optional[list] = None,
-    ) -> dict:
+    def score(self, result: dict, agent_res: Optional[dict] = None,
+              coverage_res: Optional[dict] = None, validation_issues: Optional[list] = None) -> dict:
+        result    = result or {}
+        agent_res = agent_res or {}
+        factors, fixes, blockers, cautions = [], [], [], []
 
-        factors = []
-        total   = 0
+        def fix(points, title, why, blocker=False):
+            fixes.append({"points": round(points), "title": title, "why": why, "blocker": blocker})
+            if blocker:
+                blockers.append(title)
 
-        # ── 1. Document completeness (0–20 pts) ──────────────────────────────
-        found   = sum(1 for f in REQUIRED_FIELDS if pa_result.get(f))
-        pct     = found / len(REQUIRED_FIELDS)
-        pts_1   = round(pct * 20)
-        total  += pts_1
-        factors.append({
-            "label":    "Document Completeness",
-            "points":   pts_1,
-            "max":      20,
-            "detail":   f"{found} of {len(REQUIRED_FIELDS)} required fields extracted",
-            "positive": pct >= 0.75,
-        })
+        # 1. Required submission details (30)
+        missing = [label for f, label in DETAIL_FIELDS.items() if not result.get(f)]
+        per = 30 / len(DETAIL_FIELDS)
+        pts1 = 30 - per * len(missing)
+        for f, label in DETAIL_FIELDS.items():
+            if not result.get(f):
+                fix(per, f"Add the {label}",
+                    "Payers return requests that can't be matched to a member or service.",
+                    blocker=(f in BLOCKING_DETAILS))
+        factors.append({"key": "details", "label": "Submission details", "points": round(pts1), "max": 30,
+                        "positive": not missing,
+                        "detail": "All 8 present" if not missing else f"Missing: {', '.join(missing)}"})
 
-        # ── 2. Validation quality (0–15 pts) ─────────────────────────────────
-        issues   = validation_issues or []
-        errors   = sum(1 for i in issues if i.get("severity") == "error")
-        warnings = sum(1 for i in issues if i.get("severity") == "warning")
-
-        if errors == 0 and warnings == 0:
-            pts_2 = 15
-            val_detail = "No errors or warnings"
-        elif errors == 0:
-            pts_2 = 10
-            val_detail = f"{warnings} warning(s), no hard errors"
-        elif errors == 1:
-            pts_2 = 5
-            val_detail = f"1 validation error, {warnings} warning(s)"
+        # 2. Provider NPI (15)
+        npi_raw = re.sub(r"\D", "", str(result.get("provider_npi") or ""))
+        npi_v   = agent_res.get("npi_verification") or {}
+        status  = npi_v.get("status")
+        if not npi_raw:
+            pts2, detail = 0, "No NPI on the request"
+            fix(15, "Add the provider's NPI", "Every prior authorization request is filed under an NPI.", True)
+        elif len(npi_raw) != 10 or not npi_check_digit_ok(npi_raw):
+            pts2, detail = 0, f"{npi_raw} fails the NPI check digit"
+            fix(15, "Correct the provider NPI",
+                "It fails the check-digit test, so it can't be a real NPI. Usually a typo.", True)
         else:
-            pts_2 = 0
-            val_detail = f"{errors} validation errors found"
+            pts2 = 9
+            if status in ("verified", "found"):
+                pts2 += 6
+                detail = f"Valid, registered to {npi_v.get('registry_name', 'the provider')}"
+            elif status == "name_mismatch":
+                detail = f"Registered to {npi_v.get('registry_name')}, not the named provider"
+                fix(6, "Use the requesting provider's own NPI",
+                    f"This NPI belongs to {npi_v.get('registry_name')}. Payers reject requests "
+                    f"filed under the wrong provider.", True)
+            elif status == "not_found":
+                pts2 += 3
+                detail = "Valid check digit, not in the CMS registry"
+                fix(3, "Confirm the NPI is enrolled",
+                    "It isn't in the CMS NPI Registry, so the payer can't match it to a provider.")
+            else:
+                pts2 += 3
+                detail = "Valid check digit. Registry couldn't be reached"
+        factors.append({"key": "npi", "label": "Provider NPI", "points": pts2, "max": 15,
+                        "positive": pts2 >= 12, "detail": detail})
 
-        total  += pts_2
-        factors.append({
-            "label":    "Validation Quality",
-            "points":   pts_2,
-            "max":      15,
-            "detail":   val_detail,
-            "positive": errors == 0,
-        })
-
-        # ── 3. Agent 1 verification signals (0–25 pts) ───────────────────────
-        pts_3       = 0
-        agent_notes = []
-
-        if agent_res:
-            # NPI (0–10 pts)
-            npi_v = agent_res.get("npi_verification")
-            if npi_v:
-                s = npi_v.get("status", "")
-                if s == "verified":
-                    pts_3 += 10
-                    agent_notes.append("NPI verified against CMS registry")
-                elif s == "name_mismatch":
-                    pts_3 += 5
-                    agent_notes.append("NPI found but name doesn't fully match")
-                elif s in ("timeout", "error"):
-                    pts_3 += 4   # can't penalise for API timeouts
-                    agent_notes.append("NPI check timed out — could not verify")
-                else:
-                    agent_notes.append("NPI not found in CMS registry")
-
-            # ICD-10 (0–10 pts)
-            icd_list = agent_res.get("icd10_verification", [])
-            if icd_list:
-                valid   = sum(1 for i in icd_list if i.get("status") == "valid")
-                total_c = len(icd_list)
-                if valid == total_c:
-                    pts_3 += 10
-                    agent_notes.append(f"All {valid} ICD-10 code(s) valid (NIH verified)")
-                elif valid > 0:
-                    pts_3 += 5
-                    agent_notes.append(f"{valid}/{total_c} ICD-10 codes valid")
-                else:
-                    agent_notes.append("No ICD-10 codes passed NIH validation")
-
-            # Drug (0–5 pts)
-            drug_v = agent_res.get("drug_verification")
-            if drug_v:
-                if drug_v.get("status") == "found":
-                    pts_3 += 5
-                    agent_notes.append("Medication verified in FDA database")
-                elif drug_v.get("status") in ("timeout", "error"):
-                    pts_3 += 2
-                    agent_notes.append("FDA drug check timed out")
-                else:
-                    agent_notes.append("Medication not found in FDA database")
+        # 3. Diagnosis codes (15)
+        codes  = _to_list(result.get("diagnosis_code"))
+        checks = agent_res.get("icd10_verification") or []
+        bad    = [c.get("code") for c in checks if c.get("status") == "invalid"]
+        unchecked = [c for c in checks if c.get("status") in ("timeout", "error")]
+        if not codes:
+            pts3, detail = 0, "No ICD-10 code"
+            fix(15, "Add the ICD-10 diagnosis code", "Medical necessity is judged against the diagnosis.", True)
+        elif bad:
+            pts3 = 5 if len(bad) < len(codes) else 0
+            detail = f"Not valid ICD-10-CM: {', '.join(bad)}"
+            fix(15 - pts3, f"Correct the diagnosis code{'s' if len(bad) > 1 else ''} {', '.join(bad)}",
+                "Invalid codes are rejected automatically.", True)
+        elif unchecked or not checks:
+            pts3, detail = 10, f"{len(codes)} code{'s' if len(codes) > 1 else ''}, not verified (lookup unavailable)"
         else:
-            agent_notes.append("Agent verification not yet run — re-run for a more accurate score")
+            pts3, detail = 15, f"{len(codes)} valid code{'s' if len(codes) > 1 else ''}"
+        factors.append({"key": "icd", "label": "Diagnosis codes", "points": pts3, "max": 15,
+                        "positive": pts3 == 15, "detail": detail})
 
-        total  += pts_3
-        factors.append({
-            "label":    "Agent Verification (NPI · ICD-10 · Drug)",
-            "points":   pts_3,
-            "max":      25,
-            "detail":   " · ".join(agent_notes) if agent_notes else "Not run",
-            "positive": pts_3 >= 15,
-        })
-
-        # ── 4. Coverage policy signal (0–15 pts) ─────────────────────────────
-        pts_4      = 0
-        cov_detail = "No CPT codes found — coverage not checked"
-
-        if coverage_res:
-            cov_list = coverage_res.get("cpt_coverage", [])
-            if cov_list:
-                worst   = sorted(
-                    cov_list,
-                    key=lambda x: _COV_ORDER.index(x.get("status", "unknown"))
-                    if x.get("status", "unknown") in _COV_ORDER else 2,
-                )[-1]   # highest index = worst outcome
-                status  = worst.get("status", "unknown")
-                pts_4   = _COV_PTS.get(status, 6)
-                label   = status.replace("_", " ").title()
-                cov_detail = f'CPT {worst.get("cpt_code", "?")}: {label}'
-                if len(cov_list) > 1:
-                    cov_detail += f" (worst of {len(cov_list)} codes)"
-
-        total  += pts_4
-        factors.append({
-            "label":    "Coverage Policy Check",
-            "points":   pts_4,
-            "max":      15,
-            "detail":   cov_detail,
-            "positive": pts_4 >= 8,
-        })
-
-        # ── 5. Historical payor approval rate (0–25 pts) ─────────────────────
-        payor     = (pa_result.get("payor") or "").strip()
-        pts_5     = 12   # neutral default when no history
-        hist_detail = "No prior records for this payor — using neutral baseline"
-
-        if payor:
-            try:
-                conn = sqlite3.connect(DB_PATH)
-                conn.row_factory = sqlite3.Row
-                row = conn.execute(
-                    """
-                    SELECT COUNT(*) AS total,
-                           SUM(CASE WHEN LOWER(approval_status)='approved' THEN 1 ELSE 0 END) AS approved
-                    FROM records
-                    WHERE payor = ?
-                      AND approval_status IS NOT NULL
-                      AND LOWER(approval_status) IN ('approved','denied','pending')
-                    """,
-                    (payor,),
-                ).fetchone()
-                conn.close()
-
-                if row and (row["total"] or 0) >= 3:
-                    rate    = (row["approved"] or 0) / row["total"]
-                    pts_5   = round(rate * 25)
-                    hist_detail = (
-                        f"{int(row['approved'] or 0)}/{row['total']} approved for {payor} "
-                        f"({int(rate * 100)}% historical rate)"
-                    )
-                elif row and (row["total"] or 0) >= 1:
-                    hist_detail = (
-                        f"Only {row['total']} record(s) for {payor} — "
-                        f"insufficient history, using neutral baseline"
-                    )
-            except Exception:
-                pass
-
-        total  += pts_5
-        factors.append({
-            "label":    "Historical Payor Approval Rate",
-            "points":   pts_5,
-            "max":      25,
-            "detail":   hist_detail,
-            "positive": pts_5 >= 15,
-        })
-
-        # ── Final score + classification ──────────────────────────────────────
-        score = min(100, max(0, total))
-
-        if score >= 75:
-            level = "High Approval Likelihood"
-            color = "#1D9E75"
-            bg    = "#f0fdf4"
-            border= "#86efac"
-            icon  = "✓"
-        elif score >= 50:
-            level = "Moderate Risk"
-            color = "#BA7517"
-            bg    = "#fffbeb"
-            border= "#fcd34d"
-            icon  = "⚠"
+        # 4. Procedure code (10)
+        cpts = [c.upper() for c in _to_list(result.get("cpt_code")) if PROCEDURE_CODE.match(c.strip().upper())]
+        if cpts:
+            pts4, detail = 10, f"{', '.join(cpts)}"
+            cov = (coverage_res or {}).get("cpt_coverage") or []
+            if cov and all(c.get("status") == "not_required" for c in cov):
+                detail += " · usually doesn't need prior authorization"
         else:
-            level = "High Denial Risk"
-            color = "#E24B4A"
-            bg    = "#fef2f2"
-            border= "#fca5a5"
-            icon  = "✗"
+            pts4, detail = 0, "No valid CPT or HCPCS code"
+            fix(10, "Add the procedure code (CPT or HCPCS)", "Tells the payer exactly what's being authorized.", True)
+        factors.append({"key": "cpt", "label": "Procedure code", "points": pts4, "max": 10,
+                        "positive": pts4 == 10, "detail": detail})
 
-        # ── Recommendation ────────────────────────────────────────────────────
-        weak_factors = [f for f in factors if not f["positive"]]
-        if not weak_factors:
-            recommendation = (
-                "All five indicators are positive. "
-                "This authorization has strong prospects for approval."
-            )
-        elif len(weak_factors) == 1:
-            recommendation = (
-                f"One risk area: {weak_factors[0]['label']}. "
-                f"Addressing this could meaningfully improve approval chances."
-            )
+        # 5. Medical-necessity evidence (30)
+        justification = (result.get("clinical_justification") or "").strip()
+        prior = _to_list(result.get("prior_treatments"))
+        pts5 = (10 if justification else 0) + (20 if prior else 0)
+        if not justification:
+            fix(10, "Add a clinical justification",
+                "Reviewers decide on medical necessity. A request without one is easy to deny.")
+        if not prior:
+            fix(20, "Document prior or conservative treatment",
+                "Missing evidence of treatments already tried (step therapy, physical therapy, "
+                "medications) is one of the most common reasons requests are denied.")
+        detail = ("Justification present · " if justification else "No justification · ") + \
+                 (f"{len(prior)} prior treatment{'s' if len(prior) > 1 else ''} documented"
+                  if prior else "no prior treatment documented")
+        factors.append({"key": "necessity", "label": "Medical-necessity evidence", "points": pts5,
+                        "max": 30, "positive": pts5 == 30, "detail": detail})
+
+        # Total, level, ranked fixes
+        total = max(0, min(100, round(pts1 + pts2 + pts3 + pts4 + pts5)))
+        if blockers:
+            total = min(total, 59)
+        elif cautions:                      # serious but fixable: never "Ready"
+            total = min(total, 84)
+        for threshold, level, color, bg, border, icon in LEVELS:
+            if total >= threshold:
+                break
+        fixes.sort(key=lambda f: (not f["blocker"], -f["points"]))
+
+        def lc(t):          # lowercase the first letter unless the first word is an acronym
+            return t if t.split(" ", 1)[0].isupper() else t[:1].lower() + t[1:]
+        if blockers:
+            rec = f"Fix before submitting: {lc(blockers[0])}."
+        elif not fixes:
+            rec = "Everything a reviewer looks for is present, and the identifiers check out."
         else:
-            labels = " and ".join(f['label'] for f in weak_factors[:2])
-            recommendation = (
-                f"Key risk areas: {labels}. "
-                f"Resolve these before submission to improve approval likelihood."
-            )
+            rec = f"Biggest gain: {lc(fixes[0]['title'])} (+{fixes[0]['points']} points)."
 
         return {
-            "score":          score,
-            "level":          level,
-            "color":          color,
-            "bg":             bg,
-            "border":         border,
-            "icon":           icon,
-            "factors":        factors,
-            "recommendation": recommendation,
+            "score": total, "level": level, "color": color, "bg": bg, "border": border, "icon": icon,
+            "factors": factors, "fixes": fixes, "blockers": blockers, "recommendation": rec,
         }
+
+
+# Backward-compatible name used by older code.
+RiskScorer = ReadinessScorer

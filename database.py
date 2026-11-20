@@ -139,7 +139,7 @@ def delete_record(record_id: int):
 
 
 def get_analytics() -> Dict:
-    """Return aggregated stats for the analytics dashboard. (Legacy — kept for History page.)"""
+    """Return aggregated stats for the analytics dashboard. (Legacy: kept for History page.)"""
     conn = get_connection()
     status_rows = conn.execute("""
         SELECT COALESCE(approval_status, 'Unknown') AS status, COUNT(*) AS count
@@ -169,7 +169,7 @@ def get_analytics() -> Dict:
     }
 
 
-# ── Scalable analytics — all aggregation in SQL, never full table scan ─────────
+# ── Scalable analytics: all aggregation in SQL, never full table scan ─────────
 
 def _where(cutoff_iso: str | None) -> tuple:
     """Return (WHERE clause, params) for optional date filter."""
@@ -196,7 +196,7 @@ def get_summary_stats(cutoff_iso: str | None = None) -> Dict:
 
 
 def get_status_breakdown(cutoff_iso: str | None = None) -> List[Dict]:
-    """Approval status counts — normalised to Title Case."""
+    """Approval status counts: normalised to Title Case."""
     where, params = _where(cutoff_iso)
     conn = get_connection()
     rows = conn.execute(f"""
@@ -217,7 +217,7 @@ def get_status_breakdown(cutoff_iso: str | None = None) -> List[Dict]:
 
 
 def get_weekly_approval_rate(cutoff_iso: str | None = None) -> List[Dict]:
-    """Approval rate (%) per ISO week — for trend chart."""
+    """Approval rate (%) per ISO week: for trend chart."""
     where, params = _where(cutoff_iso)
     conn = get_connection()
     rows = conn.execute(f"""
@@ -234,7 +234,7 @@ def get_weekly_approval_rate(cutoff_iso: str | None = None) -> List[Dict]:
 
 
 def get_docs_over_time(cutoff_iso: str | None = None) -> List[Dict]:
-    """Daily document volume — for fallback area chart."""
+    """Daily document volume: for fallback area chart."""
     where, params = _where(cutoff_iso)
     conn = get_connection()
     rows = conn.execute(f"""
@@ -248,7 +248,7 @@ def get_docs_over_time(cutoff_iso: str | None = None) -> List[Dict]:
 
 
 def get_payor_approval_rates(cutoff_iso: str | None = None, min_docs: int = 2) -> List[Dict]:
-    """Approval rate per payor — only payors with >= min_docs documents."""
+    """Approval rate per payor: only payors with >= min_docs documents."""
     where, params = _where(cutoff_iso)
     conn = get_connection()
     rows = conn.execute(f"""
@@ -267,7 +267,7 @@ def get_payor_approval_rates(cutoff_iso: str | None = None, min_docs: int = 2) -
 
 
 def get_top_denial_reasons(cutoff_iso: str | None = None, limit: int = 50) -> List[Dict]:
-    """Raw denial reasons — caller does theme clustering."""
+    """Raw denial reasons: caller does theme clustering."""
     where_clause, params = _where(cutoff_iso)
     extra = "AND denial_reason IS NOT NULL AND denial_reason != ''"
     if where_clause:
@@ -334,7 +334,7 @@ def get_top_diagnosis_codes(cutoff_iso: str | None = None, limit: int = 10) -> L
 def get_agent_stats(cutoff_iso: str | None = None) -> Dict:
     """
     Aggregate agent verification pass rates.
-    Fetches only the agent_results column — not the full record.
+    Fetches only the agent_results column: not the full record.
     """
     where, params = _where(cutoff_iso)
     extra = "AND agent_results IS NOT NULL"

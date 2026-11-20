@@ -1,297 +1,313 @@
 """
-Agent 1 — Validation Agent
+Agent 1: Validation Agent
 ===========================
-Autonomously validates extracted prior auth fields against three real
-government / regulatory APIs. No API keys required for any of them.
+Checks the extracted provider, diagnosis and drug against public reference
+data. No API keys required.
 
-APIs used:
-  1. CMS NPI Registry      https://npiregistry.cms.hhs.gov/api/
-  2. NIH ICD-10 API        https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search
-  3. OpenFDA Drug API      https://api.fda.gov/drug/label.json
+  1. Provider NPI   NPI check digit (Luhn, CMS spec) computed locally, then the
+                    CMS NPPES NPI Registry      https://npiregistry.cms.hhs.gov/api/
+  2. ICD-10-CM      NLM Clinical Tables         https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search
+  3. Drug           openFDA drug labels         https://api.fda.gov/drug/label.json
+
+The three checks run in parallel. Successful lookups are cached in-process, so
+re-running the same document, or many documents sharing a provider or code,
+doesn't hit the APIs again.
+
+Status values
+-------------
+NPI:   verified        in the registry and the provider's last name matches
+       found           in the registry, but the document gave no provider name
+       name_mismatch   in the registry, registered to someone else
+       not_found       passes the check digit but isn't in the registry
+       invalid_format  fails the check digit, so it cannot be a real NPI
+       timeout / error the registry couldn't be reached
+ICD-10: valid / invalid / timeout / error
+Drug:   found / not_found / timeout / error
 """
 
-import re
 import json
-import requests
+import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
+import requests
 
-# ── Endpoints ──────────────────────────────────────────────────────────────────
 NPI_ENDPOINT   = "https://npiregistry.cms.hhs.gov/api/"
 ICD10_ENDPOINT = "https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search"
 FDA_ENDPOINT   = "https://api.fda.gov/drug/label.json"
-TIMEOUT        = 8  # seconds — generous but won't hang the UI
+TIMEOUT        = 8
+
+# Words too generic to identify an organization.
+_ORG_STOPWORDS = {
+    "the", "and", "of", "hospital", "medical", "center", "centre", "health",
+    "clinic", "group", "associates", "care", "services", "llc", "inc", "pc",
+    "university", "system", "physicians",
+}
+
+
+# ── In-process cache for successful lookups ──────────────────────────────────
+_cache: dict = {}
+_cache_lock = threading.Lock()
+
+
+def _cached(key, fn):
+    """Return a cached successful result, or call fn and cache it unless it failed."""
+    with _cache_lock:
+        if key in _cache:
+            return dict(_cache[key])
+    out = fn()
+    if out.get("status") not in ("timeout", "error"):
+        with _cache_lock:
+            _cache[key] = dict(out)
+    return out
+
+
+# ── NPI check digit ──────────────────────────────────────────────────────────
+
+def npi_check_digit_ok(npi: str) -> bool:
+    """
+    Validate an NPI's 10th digit. Per the CMS standard, the Luhn algorithm runs
+    over the prefix 80840 + the first nine digits (equivalently: Luhn sum of the
+    10 digits plus the constant 24 must be divisible by 10).
+    """
+    if not npi or not re.fullmatch(r"\d{10}", npi):
+        return False
+    total = 0
+    for i, ch in enumerate(reversed("80840" + npi)):
+        d = int(ch)
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
+
+
+def _person_tokens(name: str) -> list:
+    # Titles aren't stripped: matching asks whether the registry's last name appears
+    # among these tokens, so extra tokens like "dr" are harmless, and stripping would
+    # break real surnames such as Do or Pa.
+    name = re.sub(r"[^A-Za-z\s\-']", " ", name or "").lower()
+    return [t for t in re.split(r"[\s\-']+", name) if len(t) >= 2]
 
 
 class ValidationAgent:
     """
-    Autonomous validation agent for prior authorization fields.
-
     Usage:
-        agent = ValidationAgent()
-        results = agent.validate_all(parsed_result_dict)
+        results = ValidationAgent().validate_all(parsed_result_dict)
     """
 
     # ── Public entry point ────────────────────────────────────────────────────
 
     def validate_all(self, result: dict) -> dict:
         """
-        Run all three validations against a parsed PA document result.
-        Returns a dict with keys: npi_verification, icd10_verification, drug_verification.
+        Run the NPI, ICD-10 and drug checks in parallel.
+        Returns {"npi_verification", "icd10_verification", "drug_verification"}.
         """
-        agent_out = {
-            "npi_verification":   None,
-            "icd10_verification": [],
-            "drug_verification":  None,
-        }
-
-        # 1. NPI
-        npi = self._clean_npi(result.get("provider_npi"))
-        if npi:
-            agent_out["npi_verification"] = self.verify_npi(
-                npi,
-                provider_name=result.get("provider_name", ""),
-            )
-
-        # 2. ICD-10 (all codes in the document)
+        npi   = self._clean_npi(result.get("provider_npi"))
         codes = self._to_list(result.get("diagnosis_code"))
         descs = self._to_list(result.get("diagnosis_description"))
-        for i, code in enumerate(codes):
-            extracted_desc = descs[i] if i < len(descs) else None
-            agent_out["icd10_verification"].append(
-                self.verify_icd10(code.strip(), extracted_desc)
-            )
+        drug  = (result.get("drug_name") or "").strip()
 
-        # 3. Drug (only if treatment text looks pharmaceutical)
-        treatment = result.get("treatment_requested") or ""
-        drug_name = self._detect_drug(treatment)
-        if drug_name:
-            agent_out["drug_verification"] = self.verify_drug(drug_name)
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            npi_f = (pool.submit(self.verify_npi, npi, result.get("provider_name") or "")
+                     if npi else None)
+            icd_fs = [pool.submit(self.verify_icd10, c, descs[i] if i < len(descs) else None)
+                      for i, c in enumerate(codes)]
+            drug_f = pool.submit(self.verify_drug, drug) if drug else None
 
-        return agent_out
+            npi_out = npi_f.result() if npi_f else None
+            if npi_out is None and result.get("provider_npi"):
+                npi_out = {
+                    "npi": str(result.get("provider_npi")),
+                    "submitted_name": result.get("provider_name") or "",
+                    "status": "invalid_format",
+                    "message": "An NPI must be exactly 10 digits.",
+                }
+            return {
+                "npi_verification":   npi_out,
+                "icd10_verification": [f.result() for f in icd_fs],
+                "drug_verification":  drug_f.result() if drug_f else None,
+            }
 
     # ── NPI Registry ──────────────────────────────────────────────────────────
 
     def verify_npi(self, npi: str, provider_name: str = "") -> dict:
-        """
-        Query CMS NPI Registry.
-        Returns verification status, registry name, specialty, and state.
-        """
         base = {"npi": npi, "submitted_name": provider_name}
-        try:
-            resp = requests.get(
-                NPI_ENDPOINT,
-                params={"number": npi, "version": "2.1"},
-                timeout=TIMEOUT,
-            )
-            resp.raise_for_status()
-            data    = resp.json()
-            results = data.get("results", [])
-
-            if not results:
-                return {
-                    **base,
-                    "status":  "not_found",
-                    "message": f"NPI {npi} does not exist in the CMS National Registry.",
-                }
-
-            r            = results[0]
-            basic        = r.get("basic", {})
-            entity_type  = r.get("enumeration_type", "NPI-1")
-            taxonomies   = r.get("taxonomies", [])
-            addresses    = r.get("addresses", [])
-
-            # Registry name
-            if entity_type == "NPI-2":       # Organisation
-                registry_name = basic.get("organization_name", "Unknown")
-            else:                             # Individual
-                parts = [
-                    basic.get("first_name", ""),
-                    basic.get("middle_name", ""),
-                    basic.get("last_name",  ""),
-                    basic.get("credential", ""),
-                ]
-                registry_name = " ".join(p for p in parts if p).strip()
-
-            specialty = taxonomies[0].get("desc",  "Unknown") if taxonomies else "Unknown"
-            state     = addresses[0].get("state",  "Unknown") if addresses  else "Unknown"
-            city      = addresses[0].get("city",   "")        if addresses  else ""
-            name_ok   = self._names_match(provider_name, registry_name)
-
-            status = "verified" if name_ok else "name_mismatch"
-            if not provider_name:
-                status = "found"
-
+        if not npi_check_digit_ok(npi):
             return {
                 **base,
-                "status":            status,
-                "registry_name":     registry_name,
-                "registry_specialty": specialty,
-                "registry_state":    state,
-                "registry_city":     city,
-                "entity_type":       "Organisation" if entity_type == "NPI-2" else "Individual",
-                "name_match":        name_ok,
-                "message": (
-                    f"Provider verified in CMS registry · {specialty} · {city}, {state}"
-                    if name_ok else
-                    f"Name mismatch: CMS registry shows '{registry_name}' ({specialty}, {state})"
-                    if status == "name_mismatch" else
-                    f"NPI found: {registry_name} · {specialty} · {city}, {state}"
-                ),
+                "status": "invalid_format",
+                "message": f"NPI {npi} fails the check-digit test, so it can't be a real NPI. "
+                           f"Usually a typo.",
             }
+        lookup = _cached(("npi", npi), lambda: self._npi_lookup(npi))
+        if lookup.get("status") != "registry_hit":
+            return {**base, **lookup}
 
+        registry_name = lookup["registry_name"]
+        if not provider_name:
+            status = "found"
+        else:
+            status = "verified" if self._names_match(provider_name, lookup) else "name_mismatch"
+        where = ", ".join(p for p in (lookup.get("registry_city"), lookup.get("registry_state")) if p)
+        msg = {
+            "verified":      f"Registered to {registry_name} · {lookup['registry_specialty']} · {where}",
+            "found":         f"Registered to {registry_name} · {lookup['registry_specialty']} · {where}",
+            "name_mismatch": f"This NPI is registered to {registry_name}, not "
+                             f"{provider_name}.",
+        }[status]
+        out = {k: v for k, v in lookup.items() if k not in ("status", "last_name")}
+        return {**base, **out, "status": status, "name_match": status == "verified", "message": msg}
+
+    def _npi_lookup(self, npi: str) -> dict:
+        try:
+            resp = requests.get(NPI_ENDPOINT, params={"number": npi, "version": "2.1"},
+                                timeout=TIMEOUT)
+            resp.raise_for_status()
+            results = resp.json().get("results") or []
         except requests.Timeout:
-            return {**base, "status": "timeout", "message": "CMS NPI Registry API timed out."}
+            return {"status": "timeout", "message": "The CMS NPI Registry timed out."}
         except Exception as e:
-            return {**base, "status": "error",   "message": f"NPI API error: {e}"}
+            return {"status": "error", "message": f"NPI Registry error: {e}"}
+
+        if not results:
+            return {
+                "status": "not_found",
+                "message": f"NPI {npi} has a valid check digit but isn't in the CMS NPI Registry.",
+            }
+        r = results[0]
+        basic = r.get("basic", {}) or {}
+        is_org = r.get("enumeration_type") == "NPI-2"
+        taxonomies = r.get("taxonomies") or []
+        primary = next((t for t in taxonomies if t.get("primary")), taxonomies[0] if taxonomies else {})
+        location = next((a for a in (r.get("addresses") or []) if a.get("address_purpose") == "LOCATION"),
+                        (r.get("addresses") or [{}])[0])
+        if is_org:
+            registry_name = basic.get("organization_name") or "Unknown organization"
+        else:
+            registry_name = " ".join(
+                p for p in (basic.get("first_name"), basic.get("middle_name"),
+                            basic.get("last_name"), basic.get("credential")) if p
+            ).strip().title()
+        return {
+            "status":             "registry_hit",
+            "registry_name":      registry_name,
+            "last_name":          (basic.get("last_name") or "").lower(),
+            "registry_specialty": primary.get("desc") or "Unknown specialty",
+            "registry_state":     (location or {}).get("state", ""),
+            "registry_city":      ((location or {}).get("city") or "").title(),
+            "entity_type":        "Organization" if is_org else "Individual",
+        }
+
+    @staticmethod
+    def _names_match(submitted: str, lookup: dict) -> bool:
+        """
+        Individuals: the registry's last name must appear in the submitted name.
+        Organizations: they must share at least one distinctive word.
+        """
+        sub = _person_tokens(submitted)
+        if lookup.get("entity_type") == "Individual":
+            last = lookup.get("last_name") or ""
+            last_parts = [p for p in re.split(r"[\s\-']+", last) if p]
+            return bool(last_parts) and all(p in sub for p in last_parts)
+        reg = set(_person_tokens(lookup.get("registry_name", ""))) - _ORG_STOPWORDS
+        return bool(reg & (set(sub) - _ORG_STOPWORDS))
 
     # ── ICD-10 ────────────────────────────────────────────────────────────────
 
     def verify_icd10(self, code: str, extracted_desc: Optional[str] = None) -> dict:
-        """
-        Query NIH Clinical Tables ICD-10-CM API.
-        Returns whether the code is valid, the official description, and
-        whether the extracted description semantically matches.
-        """
+        code = re.sub(r"\s+", "", (code or "")).upper()
+        if "." not in code and len(code) > 3:      # M5442 -> M54.42 (NLM codes are dotted)
+            code = code[:3] + "." + code[3:]
         base = {"code": code, "extracted_description": extracted_desc}
+        lookup = _cached(("icd", code), lambda: self._icd_lookup(code))
+        out = {**base, **lookup}
+        if lookup["status"] == "valid":
+            match = self._desc_similarity(extracted_desc, lookup["official_description"]) \
+                if extracted_desc else None
+            out["description_match"] = match
+            out["message"] = f"Valid ICD-10-CM code · {lookup['official_description']}"
+        return out
+
+    def _icd_lookup(self, code: str) -> dict:
         try:
-            resp = requests.get(
-                ICD10_ENDPOINT,
-                params={"sf": "code,name", "terms": code, "maxList": 10},
-                timeout=TIMEOUT,
-            )
+            resp = requests.get(ICD10_ENDPOINT,
+                                params={"sf": "code,name", "terms": code, "maxList": 10},
+                                timeout=TIMEOUT)
             resp.raise_for_status()
             data = resp.json()
-
-            # Response: [total, [field_names], {codebook?}, [[code, desc], ...]]
-            matches = data[3] if len(data) > 3 and data[3] else []
-
-            # Find exact code match (case-insensitive)
-            exact = next(
-                (m for m in matches if m[0].strip().upper() == code.upper()),
-                None,
-            )
-
-            if not exact:
-                return {
-                    **base,
-                    "status":               "invalid",
-                    "official_description": None,
-                    "description_match":    False,
-                    "message":              f"ICD-10 code '{code}' not found in NIH database.",
-                }
-
-            official = exact[1]
-            desc_match = (
-                self._desc_similarity(extracted_desc, official)
-                if extracted_desc
-                else None
-            )
-
-            return {
-                **base,
-                "status":               "valid",
-                "official_description": official,
-                "description_match":    desc_match,
-                "message": (
-                    f"Valid ICD-10 code · {official}"
-                    + (" · Description matches ✓" if desc_match is True  else
-                       " · Description differs from official" if desc_match is False else "")
-                ),
-            }
-
         except requests.Timeout:
-            return {**base, "status": "timeout", "official_description": None,
-                    "description_match": None, "message": "NIH ICD-10 API timed out."}
+            return {"status": "timeout", "official_description": None,
+                    "message": "The NLM ICD-10 service timed out."}
         except Exception as e:
-            return {**base, "status": "error", "official_description": None,
-                    "description_match": None, "message": f"ICD-10 API error: {e}"}
+            return {"status": "error", "official_description": None,
+                    "message": f"ICD-10 lookup error: {e}"}
+        matches = data[3] if len(data) > 3 and data[3] else []
+        exact = next((m for m in matches if m[0].strip().upper() == code), None)
+        if not exact:
+            return {"status": "invalid", "official_description": None,
+                    "message": f"'{code}' is not a billable ICD-10-CM code in the NLM database."}
+        return {"status": "valid", "official_description": exact[1]}
 
-    # ── OpenFDA Drug ─────────────────────────────────────────────────────────
+    # ── openFDA ───────────────────────────────────────────────────────────────
 
     def verify_drug(self, drug_name: str) -> dict:
         """
-        Query OpenFDA drug label endpoint.
-        Tries brand name first, then generic name.
+        Look the drug up in openFDA's drug label database: generic name first,
+        then brand name, then active substance. A match confirms the drug has a
+        US label on file; it is not a coverage or formulary decision.
         """
-        base = {"searched_name": drug_name}
+        name = re.sub(r"\s+", " ", drug_name or "").strip()
+        base = {"searched_name": name}
+        if not name:
+            return {**base, "status": "not_found", "message": "No drug name to check."}
+        return {**base, **_cached(("drug", name.lower()), lambda: self._fda_lookup(name))}
 
-        def _parse_fda(data: dict) -> Optional[dict]:
-            results = data.get("results", [])
-            if not results:
-                return None
-            r        = results[0]
-            openfda  = r.get("openfda", {})
-            brands   = openfda.get("brand_name",       [])
-            generics = openfda.get("generic_name",     [])
-            mfrs     = openfda.get("manufacturer_name",[])
-            routes   = openfda.get("route",            [])
-            return {
-                **base,
-                "status":       "found",
-                "fda_brand":    brands[0]   if brands   else None,
-                "generic_name": generics[0] if generics else None,
-                "manufacturer": mfrs[0]     if mfrs     else "Unknown",
-                "route":        routes[0]   if routes   else None,
-                "message":      f"Drug verified in FDA database · {brands[0] if brands else generics[0] if generics else drug_name}",
-            }
-
+    def _fda_lookup(self, name: str) -> dict:
         try:
-            # Brand name search
-            r1 = requests.get(
-                FDA_ENDPOINT,
-                params={"search": f'openfda.brand_name:"{drug_name}"', "limit": 1},
-                timeout=TIMEOUT,
-            )
-            if r1.status_code == 200:
-                hit = _parse_fda(r1.json())
-                if hit:
-                    return hit
-
-            # Generic name search
-            r2 = requests.get(
-                FDA_ENDPOINT,
-                params={"search": f'openfda.generic_name:"{drug_name}"', "limit": 1},
-                timeout=TIMEOUT,
-            )
-            if r2.status_code == 200:
-                hit = _parse_fda(r2.json())
-                if hit:
-                    return hit
-
-            # Substance name search (wider net)
-            r3 = requests.get(
-                FDA_ENDPOINT,
-                params={"search": f'openfda.substance_name:"{drug_name}"', "limit": 1},
-                timeout=TIMEOUT,
-            )
-            if r3.status_code == 200:
-                hit = _parse_fda(r3.json())
-                if hit:
-                    return hit
-
-            return {
-                **base,
-                "status":  "not_found",
-                "message": f"'{drug_name}' was not found in the FDA drug label database.",
-            }
-
+            for field in ("openfda.generic_name", "openfda.brand_name", "openfda.substance_name"):
+                resp = requests.get(FDA_ENDPOINT,
+                                    params={"search": f'{field}:"{name}"', "limit": 1},
+                                    timeout=TIMEOUT)
+                if resp.status_code == 200:
+                    results = resp.json().get("results") or []
+                    if results:
+                        ofda = results[0].get("openfda", {}) or {}
+                        brand   = (ofda.get("brand_name") or [None])[0]
+                        generic = (ofda.get("generic_name") or [None])[0]
+                        mfr     = (ofda.get("manufacturer_name") or [None])[0]
+                        label   = " / ".join(p for p in (brand, generic and generic.lower()) if p) or name
+                        return {
+                            "status":       "found",
+                            "fda_brand":    brand,
+                            "generic_name": generic,
+                            "manufacturer": mfr,
+                            "route":        (ofda.get("route") or [None])[0],
+                            "message":      f"FDA label on file: {label}" + (f" ({mfr})" if mfr else ""),
+                        }
+                elif resp.status_code != 404:      # 404 = no match for this field
+                    resp.raise_for_status()
+            return {"status": "not_found",
+                    "message": f"No FDA drug label matches '{name}'. Check the spelling or "
+                               f"whether it's a device or compounded product."}
         except requests.Timeout:
-            return {**base, "status": "timeout", "message": "OpenFDA API timed out."}
+            return {"status": "timeout", "message": "openFDA timed out."}
         except Exception as e:
-            return {**base, "status": "error",   "message": f"FDA API error: {e}"}
+            return {"status": "error", "message": f"openFDA error: {e}"}
 
-    # ── Private helpers ───────────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _clean_npi(self, val) -> Optional[str]:
-        """Strip non-digits and return NPI only if it is exactly 10 digits."""
+    @staticmethod
+    def _clean_npi(val) -> Optional[str]:
         if not val:
             return None
         digits = re.sub(r"\D", "", str(val))
         return digits if len(digits) == 10 else None
 
-    def _to_list(self, val) -> list:
-        """Normalise list / JSON-string / comma-string → plain Python list."""
+    @staticmethod
+    def _to_list(val) -> list:
         if not val:
             return []
         if isinstance(val, list):
@@ -306,99 +322,19 @@ class ValidationAgent:
                 pass
         return [v.strip() for v in s.split(",") if v.strip()]
 
-    # Drug patterns that suggest a pharmaceutical treatment
-    _DRUG_SIGNALS = re.compile(
-        r"""
-        \b(\w[\w\s\-]{1,40}?)          # candidate drug name (1–40 chars)
-        \s*                            # optional space
-        (?:                            # followed by one of:
-            \d+\s*(?:mg|mcg|ml|iu|units?|mcg/hr|mg/dl)  # dose unit
-          | (?:injection|infusion|tablet|capsule|solution|
-               inhaler|patch|cream|ointment|drops|spray|pump)  # form
-        )
-        """,
-        re.IGNORECASE | re.VERBOSE,
-    )
-
-    def _detect_drug(self, treatment: str) -> Optional[str]:
-        """
-        Return the first drug-like name found in the treatment text,
-        or None if treatment appears to be a procedure/surgery.
-        """
-        if not treatment:
-            return None
-        # Skip clearly procedural treatments
-        procedure_words = {
-            "surgery", "procedure", "laparoscop", "cholecystectomy",
-            "appendectomy", "mri", "ct scan", "x-ray", "biopsy",
-            "endoscop", "catheter", "dialysis", "therapy", "tms",
-        }
-        low = treatment.lower()
-        if any(pw in low for pw in procedure_words):
-            return None
-
-        m = self._DRUG_SIGNALS.search(treatment)
-        if m:
-            candidate = m.group(1).strip()
-            # Must be at least 3 chars and not a common non-drug word
-            skip = {"the", "for", "and", "with", "via", "per", "this"}
-            if len(candidate) >= 3 and candidate.lower() not in skip:
-                return candidate
-
-        return None
-
-    def _names_match(self, submitted: str, registry: str) -> bool:
-        """
-        Fuzzy provider name comparison.
-        Removes titles/credentials, lowercases, then checks for
-        at least one significant last-name token overlap (≥4 chars).
-        """
-        if not submitted or not registry:
-            return False
-
-        def _tokenise(s: str) -> set:
-            # Remove common medical titles and credentials
-            s = re.sub(
-                r"\b(dr|md|do|np|pa|rn|dpm|dds|phd|dpt|dnp|facp|facs|"
-                r"ms|rph|pharmd|pt|ot|lcsw|mph|mbbs)\b",
-                "", s, flags=re.IGNORECASE,
-            )
-            s = re.sub(r"[^a-zA-Z\s]", "", s).lower()
-            return {w for w in s.split() if len(w) >= 3}
-
-        t1 = _tokenise(submitted)
-        t2 = _tokenise(registry)
-        return bool(t1 & t2)  # any shared token = match
-
-    def _desc_similarity(self, extracted: str, official: str) -> bool:
-        """
-        Jaccard similarity of word sets.
-        ≥ 0.25 overlap is treated as a description match.
-        """
-        def _words(s: str) -> set:
-            return set(re.sub(r"[^a-zA-Z\s]", "", s.lower()).split())
-
-        w1 = _words(extracted)
-        w2 = _words(official)
+    @staticmethod
+    def _desc_similarity(extracted: str, official: str) -> bool:
+        def words(s):
+            return set(re.sub(r"[^a-zA-Z\s]", "", (s or "").lower()).split())
+        w1, w2 = words(extracted), words(official)
         if not w1 or not w2:
             return False
-        shared = w1 & w2
-        union  = w1 | w2
-        return len(shared) / len(union) >= 0.25
+        return len(w1 & w2) / len(w1 | w2) >= 0.25
 
 
-# ── Quick CLI test ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     agent = ValidationAgent()
-
-    print("\n── NPI Verification ──")
-    npi_result = agent.verify_npi("1457471942", "James Daly")
-    print(json.dumps(npi_result, indent=2))
-
-    print("\n── ICD-10 Verification ──")
-    icd_result = agent.verify_icd10("C50.411", "Malignant neoplasm of upper-outer quadrant of right female breast")
-    print(json.dumps(icd_result, indent=2))
-
-    print("\n── Drug Verification ──")
-    drug_result = agent.verify_drug("Insulin")
-    print(json.dumps(drug_result, indent=2))
+    print(json.dumps(agent.validate_all({
+        "provider_npi": "1679576722", "provider_name": "Dr. David Wiebe",
+        "diagnosis_code": ["M17.12"], "drug_name": "pembrolizumab",
+    }), indent=2))

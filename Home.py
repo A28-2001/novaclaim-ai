@@ -1,2396 +1,535 @@
-import streamlit as st
-import streamlit.components.v1 as components
-import json
+"""
+NovaClaim AI: Home
+===================
+A scroll story that follows one real (synthetic) denied request through the
+pipeline, then lets the visitor run their own document.
+
+  hero → 01 problem → 02 read → 03 check → 04 score → 05 appeal → 06 proof
+       → 07 try it → 08 about
+
+The story is built from the saved output of the last evaluation run, so it
+renders instantly and works even without an API key. The checks on it run live
+against the public registries and are cached. Visitor uploads are processed
+live and kept only in their browser session, never in the shared database.
+"""
+
 import os
-import time
 import smtplib
+import uuid
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import datetime
-from parser import parse_prior_auth
-from appeal_agent import AppealAgent
 
-_appeal_agent = AppealAgent()
-from validator import validate_fields
-from pdf_reader import extract_text_from_pdf, extract_text_from_txt
-from database import init_db, save_record, save_agent_results, get_agent_results
-from validation_agent import ValidationAgent
-from coverage_agent import CoverageAgent
-from risk_scorer import RiskScorer
+import streamlit as st
 
-_agent    = ValidationAgent()
-_coverage = CoverageAgent()
-_risk     = RiskScorer()
+st.set_page_config(
+    page_title="NovaClaim AI · Prior authorization, read and checked",
+    page_icon="🩺",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
-# ── Secrets resolution ─────────────────────────────────────────────────────────
-# Checks st.secrets first (works locally via secrets.toml + on Streamlit Cloud),
-# then falls back to environment variable so existing `export` workflows still work.
+
+# ── Secrets → environment (before any module reads them) ─────────────────────
 def _secret(key: str, default: str = "") -> str:
     try:
         return st.secrets[key] or default
     except Exception:
         return os.environ.get(key, default)
 
-_groq_key = _secret("GROQ_API_KEY")
-if _groq_key:
-    os.environ["GROQ_API_KEY"] = _groq_key  # downstream modules (appeal_agent) read os.environ
 
-# Optional model override. Lets a future Groq deprecation be fixed by editing a
-# secret rather than redeploying code. Must be set before parser.py is imported.
-_groq_model = _secret("GROQ_MODEL")
-if _groq_model:
-    os.environ["GROQ_MODEL"] = _groq_model
+for _k in ("GROQ_API_KEY", "GROQ_MODEL"):
+    if _secret(_k):
+        os.environ[_k] = _secret(_k)
+HAS_KEY = bool(os.environ.get("GROQ_API_KEY"))
 
-# ── Email helper ───────────────────────────────────────────────────────────────
-def _send_demo_email(name: str, email: str, org: str, vol: str,
-                     role: str, src: str, msg: str) -> tuple[bool, str]:
-    """Send demo request to SMTP_EMAIL via Gmail. Returns (success, status_str)."""
-    smtp_email = _secret("SMTP_EMAIL")
-    smtp_pass  = _secret("SMTP_APP_PASSWORD")
+from appeal_agent import AppealAgent                                   # noqa: E402
+from pdf_reader import extract_text_from_pdf, extract_text_from_txt    # noqa: E402
+from pipeline import case_from_saved, process_document                 # noqa: E402
+from ui import blocks as B                                             # noqa: E402
+from ui import facts as F                                              # noqa: E402
+from ui.theme import inject_motion, inject_theme, scroll_to                       # noqa: E402
 
-    if not smtp_email or not smtp_pass:
-        return False, "not_configured"
+inject_theme()
+EV = F.eval_summary()
 
-    body = f"""New demo request via NovaClaim AI
+if "cases" not in st.session_state:
+    st.session_state.cases = []
 
-Name:         {name}
-Email:        {email}
-Organization: {org or '—'}
-PA Volume:    {vol}
-Role:         {role}
-Found via:    {src or '—'}
+MAX_RUNS = 15   # live LLM calls per visitor session; protects the free Groq quota
 
-Message:
-{msg}
-"""
-    mail = MIMEMultipart()
-    mail["From"]    = smtp_email
-    mail["To"]      = smtp_email
-    mail["Subject"] = f"NovaClaim AI Demo Request — {name}"
-    mail.attach(MIMEText(body, "plain"))
 
+def over_quota() -> bool:
+    return st.session_state.get("runs", 0) >= MAX_RUNS
+
+
+def count_run() -> None:
+    st.session_state["runs"] = st.session_state.get("runs", 0) + 1
+
+
+def H(markup: str) -> None:
+    """Render HTML. Strips indentation and blank lines so Markdown never splits the block."""
+    st.markdown("\n".join(ln.strip() for ln in markup.splitlines() if ln.strip()), unsafe_allow_html=True)
+
+
+# ── Featured case (cached; transient API failures are not cached) ────────────
+class _Transient(Exception):
+    def __init__(self, case):
+        self.case = case
+
+
+def _has_failures(case: dict) -> bool:
+    ar = case.get("agent_res") or {}
+    statuses = [(ar.get("npi_verification") or {}).get("status")] + \
+               [c.get("status") for c in ar.get("icd10_verification") or []]
+    return bool(case.get("errors")) or any(s in ("timeout", "error") for s in statuses)
+
+
+def _build_saved_case(filename: str) -> dict | None:
+    saved, text = F.saved_extraction(filename), F.read_sample(filename)
+    if not saved or not text:
+        return None
+    case = case_from_saved(filename, text, saved["result"])
+    case["timings"]["extraction"] = saved.get("parse_s")
+    case["synthetic"] = True
+    if _has_failures(case):
+        raise _Transient(case)
+    return case
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def _featured_cached(stamp: float, filename: str) -> dict | None:
+    return _build_saved_case(filename)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _featured_degraded(stamp: float, filename: str) -> dict | None:
+    """Same build, cached briefly: when a registry is down, don't retry it on every click."""
+    try:
+        return _build_saved_case(filename)
+    except _Transient as t:
+        return t.case
+
+
+def featured_case(filename: str = F.FEATURED_FILE) -> dict | None:
+    stamp = os.path.getmtime(F.OUTPUTS_PATH) if os.path.exists(F.OUTPUTS_PATH) else 0.0
+    try:
+        return _featured_cached(stamp, filename)
+    except _Transient:
+        return _featured_degraded(stamp, filename)
+
+
+# ── Appeal block (shared by story and results) ───────────────────────────────
+def appeal_block(case: dict, key: str, saved: dict | None = None) -> None:
+    if (case.get("result") or {}).get("approval_status") != "Denied":
+        return
+    store = f"appeal_{key}"
+    if saved and store not in st.session_state:
+        st.session_state[store] = saved
+    c1, c2 = st.columns([1, 2.4])
+    with c1:
+        label = "Regenerate live" if st.session_state.get(store) else "Draft the appeal letter"
+        clicked = st.button(label, key=f"btn_{key}", type="primary",
+                            disabled=not HAS_KEY or over_quota(), width="stretch")
+    with c2:
+        if not HAS_KEY:
+            st.caption("Drafting needs a Groq API key, which isn't configured on this deployment.")
+        else:
+            st.caption("Calls the Groq LLM with this document. Takes about 5–15 seconds.")
+    if clicked:
+        count_run()
+        with st.spinner("Drafting from the document…"):
+            try:
+                st.session_state[store] = AppealAgent().generate(
+                    case["result"], case.get("agent_res"), case.get("coverage_res"), case.get("text", ""))
+            except Exception as ex:
+                st.session_state[store] = {"error": f"{type(ex).__name__}: {ex}"}
+    out = st.session_state.get(store)
+    if not out:
+        return
+    if "error" in out:
+        st.error("The appeal agent couldn't draft a letter this time.")
+        with st.expander("Technical details"):
+            st.code(out["error"])
+        return
+    meta = out["metadata"]
+    gaps = meta.get("placeholders", 0)
+    H(f'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 10px">'
+      f'<span class="nc-draft">Draft · requires clinician review</span>'
+      f'<span class="nc-small">{gaps} gap{"s" if gaps != 1 else ""} marked for the clinician'
+      f'{" · cites " + B.e(meta["guideline"]) if meta.get("guideline") else ""}</span></div>')
+    H(B.letter_html(out["letter"]))
+    st.download_button("Download draft (.txt)", out["letter"], file_name=f"appeal_draft_{key}.txt",
+                       mime="text/plain", key=f"dl_{key}")
+
+
+# ── Chapter rail ──────────────────────────────────────────────────────────────
+CHAPTERS = [("problem", "The problem"), ("read", "Read"), ("check", "Check"), ("score", "Score"),
+            ("appeal", "Appeal"), ("proof", "Proof"), ("try", "Try it"), ("about", "About")]
+H('<nav class="nc-rail" aria-label="Chapters">' + "".join(
+    f'<a href="#{cid}" data-jump="{cid}" aria-label="{label}"><span>{label}</span><i></i></a>'
+    for cid, label in CHAPTERS) + "</nav>")
+
+
+# ── Hero ──────────────────────────────────────────────────────────────────────
+stats = []
+if EV:
+    stats.append((f"{EV['accuracy'] * 100:.0f}%", f"field accuracy on {EV['docs']} labeled synthetic documents"))
+    if EV.get("median_e2e"):
+        stats.append((f"{EV['median_e2e']:.1f}s", "median time to read, check and score a request"))
+else:
+    stats.append(("12", "details extracted from every request"))
+stats.append(("4", "AI agents that verify, score and appeal each request"))
+stats_html = "".join(f'<div><div class="n">{B.e(n)}</div><div class="l">{B.e(l)}</div></div>' for n, l in stats)
+
+H(f"""
+<section class="nc-hero nc-bleed" data-parallax>
+  <div class="nc-layer nc-grid" data-speed="0.12"></div>
+  <div class="nc-layer" data-speed="0.32"><span class="nc-orb o1"></span><span class="nc-orb o2"></span><span class="nc-orb o3"></span></div>
+  <div class="nc-layer" data-speed="0.55">
+    <div class="nc-paper p1"><div class="scan"></div><div class="ttl">PRIOR AUTHORIZATION REQUEST</div>
+      <div class="ln" style="width:70%"></div><div class="hl" style="width:55%;background:rgba(18,165,122,.35)"></div>
+      <div class="ln"></div><div class="hl" style="width:40%;background:rgba(79,70,229,.3)"></div><div class="ln" style="width:85%"></div>
+      <div class="ln" style="width:60%"></div><div class="hl" style="width:30%;background:rgba(194,119,11,.35)"></div>
+      <span class="tag" style="background:#ECFDF5;color:#0B7A55">NPI</span><span class="tag" style="background:#EEF2FF;color:#3730A3">ICD-10</span>
+      <span class="tag" style="background:#FFFBEB;color:#8A5300">CPT</span></div>
+    <div class="nc-paper p2"><div class="ttl">READINESS</div>
+      <div style="height:10px;border-radius:5px;background:#EEEAE2;margin:12px 0 8px;overflow:hidden"><div style="width:72%;height:100%;background:#C2770B"></div></div>
+      <div class="ln" style="width:80%"></div><div class="ln" style="width:50%"></div>
+      <span class="tag" style="background:#FEF2F2;color:#B4232B">fix first</span></div>
+  </div>
+  <div class="nc-layer" data-speed="0.85">
+    <div class="nc-paper p3"><div class="ttl">APPEAL · DRAFT</div><div class="ln"></div><div class="ln" style="width:75%"></div>
+      <div class="ln" style="width:90%"></div><div class="hl" style="width:65%;background:rgba(224,161,0,.3)"></div><div class="ln" style="width:55%"></div></div>
+  </div>
+  <div class="nc-hero-inner">
+    <div class="nc-brand"><span class="nc-mark">NC</span> NovaClaim AI</div>
+    <h1>Your doctor already decided. <em>Now the paperwork has to agree.</em></h1>
+    <p class="sub">NovaClaim reads a prior authorization request, has four AI agents check it against public
+    health databases, and shows what to fix before it's sent, or drafts the appeal if it was denied.</p>
+    <div class="nc-ctas">
+      <a class="nc-cta solid" href="#read" data-jump="read">Follow one denied request ↓</a>
+      <a class="nc-cta ghost" href="#try" data-jump="try">Try it yourself</a>
+    </div>
+    <div class="nc-stats">{stats_html}</div>
+  </div>
+  <div class="nc-cue">Scroll</div>
+</section>
+""")
+
+
+# ── 01 The problem ────────────────────────────────────────────────────────────
+H(f"""
+<section id="problem" class="nc-section nc-chapter">
+  <div class="nc-reveal"><div class="nc-eyebrow"><b>01</b>The problem</div>
+  <h2 class="nc-h2">Every week, a doctor's practice spends <em>{F.AMA_HOURS_PER_WEEK} hours</em> asking permission.</h2>
+  <p class="nc-lede">Before many treatments, insurers require <b>prior authorization</b>: a request proving the care is
+  medically necessary. It's slow and manual, and when a detail is missing the request comes back denied while the
+  patient waits.</p></div>
+  <div class="nc-bigstats">
+    <div class="nc-big nc-reveal" style="--d:0ms"><div class="n" data-count="{F.AMA_HOURS_PER_WEEK}" data-suf=" hrs">{F.AMA_HOURS_PER_WEEK} hrs</div>
+      <div class="l">of physician and staff time spent on prior authorization, per physician, every week</div></div>
+    <div class="nc-big nc-reveal" style="--d:140ms"><div class="n" data-count="{F.AMA_REQUESTS_PER_WEEK}">{F.AMA_REQUESTS_PER_WEEK}</div>
+      <div class="l">prior authorization requests per physician, per week</div></div>
+    <div class="nc-big nc-reveal" style="--d:280ms"><div class="n red" data-count="{F.AMA_ADVERSE_PCT}" data-suf="%">{F.AMA_ADVERSE_PCT}%</div>
+      <div class="l">of physicians say prior authorization led to a serious adverse event for a patient in their care</div></div>
+  </div>
+  <p class="nc-small nc-reveal" style="margin-top:14px">Source: <a href="{F.AMA_URL}" target="_blank" rel="noopener">{F.AMA_SOURCE}</a>
+  (1,000 physicians, published May 2026).</p>
+</section>
+""")
+
+
+# ── Story chapters 02–05 (one denied request) ────────────────────────────────
+case = featured_case()
+if case:
+    r = case["result"]
+    H(f"""
+    <section id="read" class="nc-section nc-chapter">
+      <div class="nc-reveal"><div class="nc-eyebrow"><b>02</b>Read</div>
+      <h2 class="nc-h2">Meet one request. <em>It was denied.</em></h2>
+      <p class="nc-lede">A lumbar spine MRI for back pain radiating down one leg. Here's the request exactly as the payer
+      received it, next to what NovaClaim's LLM extracted. Matching colors show where each detail came from.</p></div>
+      {B.before_after(case, "Original request · synthetic")}
+    </section>
+    """)
+
+    H(f"""
+    <section id="check" class="nc-section nc-chapter">
+      <div class="nc-reveal"><div class="nc-eyebrow"><b>03</b>Check</div>
+      <h2 class="nc-h2">Four agents <em>check every detail.</em></h2>
+      <p class="nc-lede">Reading isn't checking. The validation agent looks the doctor, codes and drug up in public
+      databases (CMS, NLM, openFDA) while the coverage agent runs alongside it. The readiness agent then scores the
+      result, and the appeal agent drafts a letter if the request was denied. The registry lookups shown here are real
+      calls, refreshed every few hours.</p></div>
+      {B.agents_timeline(case)}
+    </section>
+    """)
+
+    rd = case.get("readiness") or {}
+    ready = rd.get("level") == "Ready to submit"
+    denial = (r.get("denial_reason") or "").strip()
+    top = (rd.get("fixes") or [{}])[0]
+    callout = ""
+    if denial and top.get("title"):
+        short = denial if len(denial) < 300 else denial[:297].rsplit(" ", 1)[0] + "…"
+        callout = (f'<div class="nc-callout nc-reveal"><div class="nc-eyebrow" style="color:var(--amber)">'
+                   f'Before vs. after the fact</div><p style="margin:8px 0 0;line-height:1.7">The payer\'s denial said: '
+                   f'<q>{B.e(short)}</q></p><p style="margin:10px 0 0;line-height:1.7">The readiness agent\'s top fix, '
+                   f'available before submission: <b>{B.e(top["title"])}</b>.</p></div>')
+    H(f"""
+    <section id="score" class="nc-section nc-chapter">
+      <div class="nc-reveal"><div class="nc-eyebrow"><b>04</b>Score</div>
+      <h2 class="nc-h2">Was it ready to send? <em>{"On paper, yes." if ready else "Not as written."}</em></h2>
+      <p class="nc-lede">The readiness agent scores what reviewers look for: complete details, real identifiers, valid
+      codes and documented medical necessity. Then it ranks what to fix first.</p></div>
+      {B.readiness_panel(rd)}
+      {callout}
+      <div style="margin-top:18px">{B.fixes_panel(rd)}</div>
+    </section>
+    """)
+
+    flagged = "conservative" in (top.get("title") or "").lower()
+    ap_case = featured_case(F.APPEAL_FILE)
+    ap_denial = ((ap_case or {}).get("result") or {}).get("denial_reason") or ""
+    ap_short = ap_denial if len(ap_denial) < 240 else ap_denial[:237].rsplit(" ", 1)[0] + "…"
+    ap_callout = "" if not ap_denial else (
+        '<div class="nc-callout nc-reveal"><div class="nc-eyebrow" style="color:var(--amber)">'
+        'Total knee replacement · denied</div><p style="margin:8px 0 0;line-height:1.7"><q>' + B.e(ap_short)
+        + "</q></p><p class=\"nc-small\" style=\"margin-top:10px\">The appeal agent drafts from the document "
+        "alone. Anything it can't support from the source is marked for the clinician to complete. It never "
+        "invents clinical history.</p></div>")
+    H(f"""
+    <section id="appeal" class="nc-section nc-chapter" style="padding-bottom:16px">
+      <div class="nc-reveal"><div class="nc-eyebrow"><b>05</b>Appeal</div>
+      <h2 class="nc-h2">Not every denial <em>deserves an appeal.</em></h2>
+      <p class="nc-lede">This MRI was denied because conservative treatment hadn't been tried yet. The honest next step is
+      to start that treatment and resubmit{", which is the gap the readiness agent flagged" if flagged else ""}.
+      Appeals are for denials where the care was justified but the paperwork fell short, like the knee replacement
+      below.</p></div>
+      {ap_callout}
+    </section>
+    """)
+    if ap_case:
+        demo = F.appeal_demo()
+        appeal_block(ap_case, "story", saved=demo if demo and demo.get("file") == F.APPEAL_FILE else None)
+else:
+    H('<section id="read" class="nc-section nc-chapter"><div class="nc-callout">The walkthrough appears after the '
+      'first evaluation run (<code>python evaluate.py</code>). You can still try a document below.</div></section>')
+
+
+# ── 06 Proof ──────────────────────────────────────────────────────────────────
+if EV:
+    proof = (f'<div class="nc-reveal" style="--d:0ms"><div class="n">{EV["correct"]}/{EV["cells"]}</div>'
+             f'<div class="l">fields extracted correctly ({EV["accuracy"] * 100:.0f}%) across {EV["docs"]} documents</div></div>'
+             f'<div class="nc-reveal" style="--d:120ms"><div class="n">{EV["hallucinated"]}/{EV["absent"]}</div>'
+             f'<div class="l">hallucinations: fields filled in that weren\'t in the document</div></div>'
+             f'<div class="nc-reveal" style="--d:240ms"><div class="n">{EV["parsed"]}/{EV["docs"]}</div>'
+             f'<div class="l">documents parsed, including one PDF</div></div>'
+             f'<div class="nc-reveal" style="--d:360ms"><div class="n">{EV["median_parse"]:.1f}s</div>'
+             f'<div class="l">median extraction time (one LLM call, {B.e(EV["model"])})</div></div>')
+    run = f" Last run {B.e(EV['run_date'])}." if EV.get("run_date") else ""
+else:
+    proof, run = '<div><div class="n">Not run</div><div class="l">Run <code>python evaluate.py</code> to measure.</div></div>', ""
+H(f"""
+<section id="proof" class="nc-band nc-bleed nc-chapter" data-parallax>
+  <div class="nc-layer" data-speed="0.25"><span class="nc-orb o1" style="right:60%;top:10%"></span><span class="nc-orb o2" style="right:5%;top:40%"></span></div>
+  <div class="inner">
+    <div class="nc-reveal"><div class="nc-eyebrow"><b style="color:#8F9AB2">06</b>Proof</div>
+    <h2 class="nc-h2">Measured, <em>not claimed.</em></h2>
+    <p class="nc-lede">Extraction is scored field by field against hand labels on a synthetic test set. Anyone can
+    reproduce it with <code>python evaluate.py</code>.{run}</p></div>
+    <div class="nc-proof">{proof}</div>
+    <p class="nc-caveat nc-reveal">Read these numbers as an upper bound. The documents are synthetic, cleanly formatted,
+    and the prompt was developed against them. Real faxed forms would score lower, and scanned PDFs aren't supported
+    yet (there's no OCR). <a href="{F.GITHUB_URL}#evaluation" target="_blank" rel="noopener" style="color:#6EE7C0">
+    Method and every miss →</a></p>
+  </div>
+</section>
+""")
+
+
+# ── 07 Try it ─────────────────────────────────────────────────────────────────
+H("""
+<section id="try" class="nc-section nc-chapter" style="padding-bottom:10px">
+  <div class="nc-reveal"><div class="nc-eyebrow"><b>07</b>Try it</div>
+  <h2 class="nc-h2">Now run one <em>yourself.</em></h2>
+  <p class="nc-lede">Pick a sample request, or upload your own PDF or text file. You'll get the same reading, checks,
+  score and (for denials) appeal draft.</p></div>
+  <div class="nc-notice">Synthetic data only. Don't upload real patient information: documents are sent to a
+  third-party LLM (Groq) and kept only in your browser session, never stored.</div>
+</section>
+""")
+
+SAMPLES = [
+    ("Approved · insulin pump", "sample_approved_insulin.txt"),
+    ("Denied · lumbar MRI", "sample_denied_mri.txt"),
+    ("Pending · chemotherapy", "sample_pending_chemo.txt"),
+    ("Has errors · bad NPI", "test_bad_npi.txt"),
+]
+
+
+def run_case(name: str, text: str, synthetic: bool = False) -> None:
+    if over_quota():
+        st.warning(f"That's the limit of {MAX_RUNS} live runs for this session. Thanks for trying it!")
+        return
+    count_run()
+    try:
+        with st.spinner(f"Reading {name} and running the agents…"):
+            c = process_document(name, text)
+        c["id"] = uuid.uuid4().hex[:8]
+        c["synthetic"] = synthetic
+        st.session_state.cases.insert(0, c)
+        st.session_state.cases = st.session_state.cases[:6]
+        st.session_state["_jump_results"] = True
+    except Exception as ex:
+        msg = f"{type(ex).__name__}: {ex}"
+        low = msg.lower()
+        if "401" in msg or "invalid_api_key" in low:
+            st.error("The Groq API key was rejected. The site owner needs to update it.")
+        elif "rate limit" in low or "429" in msg:
+            st.error("The free LLM tier is busy right now. Wait a few seconds and try again.")
+        elif "model" in low and ("not found" in low or "decommission" in low):
+            st.error("The configured model isn't available. The site owner needs to set GROQ_MODEL.")
+        else:
+            st.error(f"Couldn't read {name}.")
+        with st.expander("Technical details"):
+            st.code(msg)
+
+
+chosen = None
+cols = st.columns(len(SAMPLES))
+for col, (label, fname) in zip(cols, SAMPLES):
+    with col:
+        if st.button(label, key=f"sample_{fname}", width="stretch", disabled=not HAS_KEY):
+            chosen = fname
+if chosen:     # run outside the narrow columns so spinners and errors get full width
+    text = F.read_sample(chosen)
+    if text:
+        run_case(chosen, text, synthetic=True)
+
+uploads = st.file_uploader("Upload prior authorization documents (PDF or TXT, up to 5)", type=["pdf", "txt"],
+                           accept_multiple_files=True, disabled=not HAS_KEY)
+if uploads and st.button("Read and check my documents", type="primary", disabled=not HAS_KEY):
+    for uf in uploads[:5]:
+        data = uf.read()
+        try:
+            text = extract_text_from_pdf(data) if uf.name.lower().endswith(".pdf") else extract_text_from_txt(data)
+        except Exception as ex:
+            st.error(f"Couldn't open {uf.name}: {ex}")
+            continue
+        if not text.strip():
+            st.error(f"{uf.name} has no text layer. It's probably a scan, and NovaClaim doesn't do OCR yet.")
+            continue
+        run_case(uf.name, text)
+if not HAS_KEY:
+    st.info("Live runs are switched off because no Groq API key is configured. The walkthrough above still works.")
+
+
+# ── Results ───────────────────────────────────────────────────────────────────
+def render_case(c: dict, first: bool) -> None:
+    r, rd = c["result"], c.get("readiness") or {}
+    lvl = {"Ready to submit": "ok", "Needs attention": "warn", "Not ready": "bad"}.get(rd.get("level"), "mute")
+    took = f" · {B.fmt_s(c['elapsed_s'])} end to end" if c.get("elapsed_s") else ""
+    H(f'<div class="nc-case-hd"><div><div class="f">{B.e(c["filename"])}</div>'
+      f'<div class="nc-small">Read and checked{B.e(took)}</div></div>'
+      f'<div style="display:flex;gap:8px;flex-wrap:wrap">{B.decision_chip(r.get("approval_status"))}'
+      f'{B.chip(lvl, "Readiness " + str(rd.get("score", "?")) + "/100")}</div></div>')
+    H(B.summary_html(c))
+    with st.expander("Document and extracted details", expanded=first):
+        H(B.before_after(c, "Your document"))
+    with st.expander("What the four agents found", expanded=first):
+        H(B.agents_timeline(c))
+    with st.expander("Readiness score and fixes", expanded=first):
+        H(B.readiness_panel(rd))
+        H('<div style="margin-top:14px">' + B.fixes_panel(rd) + "</div>")
+    appeal_block(c, c["id"])
+    with st.expander("Raw extraction (JSON)"):
+        st.json(r)
+
+
+if st.session_state.cases:
+    H('<div id="results" style="scroll-margin-top:20px"></div>')
+    h1, h2 = st.columns([4, 1])
+    with h1:
+        H('<div class="nc-eyebrow" style="margin-top:26px">Your results</div>')
+    with h2:
+        if st.button("Clear results", width="stretch"):
+            st.session_state.cases = []
+            st.rerun()
+    for i, c in enumerate(st.session_state.cases):
+        if i == 0:
+            render_case(c, True)
+        else:
+            with st.expander(f"Earlier: {c['filename']}"):
+                render_case(c, False)
+
+if st.session_state.pop("_jump_results", False):
+    scroll_to("results")
+
+
+# ── 08 About + contact ────────────────────────────────────────────────────────
+H(f"""
+<section id="about" class="nc-section nc-chapter" style="padding-bottom:10px">
+  <div class="nc-reveal"><div class="nc-eyebrow"><b>08</b>About</div>
+  <h2 class="nc-h2">Built end to end by <em>Aakash Mehta.</em></h2></div>
+</section>
+""")
+a_col, c_col = st.columns([1.15, 1], gap="large")
+with a_col:
+    H(f"""
+    <div class="nc-card nc-reveal">
+      <p style="line-height:1.75;margin-top:0">AI Implementation Analyst. NovaClaim is a portfolio project: LLM extraction,
+      four agents that check the result against public health data, a submission-readiness score, a grounded appeal
+      drafter, an evaluation harness with hand-labeled ground truth, and a SQL analytics layer.</p>
+      <p class="nc-small">Prototype on synthetic data. Not a medical or billing tool, and not HIPAA-ready.</p>
+      <div class="nc-links"><a href="{F.LINKEDIN_URL}" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="{F.GITHUB_URL}" target="_blank" rel="noopener">GitHub</a><a href="mailto:{F.EMAIL}">{F.EMAIL}</a></div>
+    </div>
+    """)
+    H('<div class="nc-eyebrow" style="margin:22px 0 6px">Under the hood</div>')
+    try:
+        st.page_link("pages/1_📊_Analytics.py", label="Analytics dashboard (SQL over the sample records)", icon="📊")
+        st.page_link("pages/2_📁_History.py", label="Record history and CSV/Excel export", icon="📁")
+    except Exception:
+        pass
+
+
+def _send_message(name: str, email: str, msg: str) -> str:
+    sender, password = _secret("SMTP_EMAIL"), _secret("SMTP_APP_PASSWORD")
+    if not sender or not password:
+        return "not_configured"
+    mail = MIMEText(f"From: {name} <{email}>\n\n{msg}")
+    mail["Subject"] = f"NovaClaim AI: message from {name}"
+    mail["From"], mail["To"], mail["Reply-To"] = sender, sender, email
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
-            server.login(smtp_email, smtp_pass)
-            server.sendmail(smtp_email, smtp_email, mail.as_string())
-        return True, "sent"
-    except Exception as exc:
-        return False, str(exc)
-
-st.set_page_config(
-    page_title="NovaClaim AI — Prior Auth Intelligence",
-    page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-init_db()
-
-# A fresh Streamlit Cloud container starts with an empty database. Load the real
-# parser outputs saved by `python evaluate.py` so the app never opens on a near-zero
-# counter. No-op once any real document exists.
-from demo_data import seed_sample_outputs, count_real_records, load_eval_summary
-seed_sample_outputs()
-
-# ── Load Material Symbols font + hide sidebar collapse button ──────────────────
-components.html("""
-<script>
-(function() {
-    var p = window.parent.document;
-
-    var ICON_PATTERN = /^[a-z][a-z_]{3,}$/;  // matches "upload", "arrow_right", etc.
-
-    function fixAll() {
-        // 1. Hide broken icon text spans (Material Symbols not loading)
-        //    Pattern: all lowercase + underscores only — e.g. "upload", "arrow_right"
-        p.querySelectorAll('span, i').forEach(function(el) {
-            var t = (el.textContent || '').trim();
-            if (ICON_PATTERN.test(t)) {
-                el.style.display = 'none';
-            }
-        });
-
-        // 2. Hide buttons whose visible text is ONLY a broken icon name
-        //    (does NOT hide the collapse/expand sidebar button or file uploader button)
-        p.querySelectorAll('button').forEach(function(btn) {
-            if (btn.closest('[data-testid="stFileUploaderDropzone"]')) return;
-            var t = (btn.innerText || '').replace(/\s/g, '').toLowerCase();
-            if (ICON_PATTERN.test(t) || t === 'uploadupload') {
-                btn.style.visibility = 'hidden';
-                btn.style.pointerEvents = 'none';
-                btn.style.width = '0';
-                btn.style.padding = '0';
-            }
-        });
-    }
-
-    fixAll();
-    setTimeout(fixAll, 500);
-    setTimeout(fixAll, 1500);
-    setTimeout(fixAll, 4000);
-    new MutationObserver(function() { fixAll(); }).observe(
-        p.documentElement, { childList: true, subtree: true }
-    );
-})();
-</script>
-""", height=0)
-
-@st.cache_data(ttl=300)
-def _live_hero_stats() -> dict:
-    """
-    Hero numbers. Cached 5 min.
-
-    `total` counts only documents that really went through extraction. The
-    synthetic rows behind the Analytics page's "Load sample documents" button are
-    excluded, so they can never inflate "PA forms parsed".
-    """
-    from database import DB_PATH
-    return {"total": count_real_records(DB_PATH), "eval": load_eval_summary()}
-
-# ── Design tokens ──────────────────────────────────────────────────────────────
-# Teal #1D9E75 | Forest #3B6D11 | Amber #BA7517 | Red #E24B4A | Slate #5F5E5A
-# Indigo #4f46e5 | Cyan #06b6d4
-
-st.markdown("""
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-
-<style>
-*, body, .stApp { font-family: 'Inter', sans-serif !important; }
-.stApp { background: #f7f8fc; color: #0f172a; }
-
-/* ── Hide Material Symbols icons that show as broken text when font fails ── */
-.material-symbols-rounded { display: none !important; }
-
-
-/* ── Sidebar: always visible on desktop, dark bg ── */
-[data-testid="stSidebar"] { background: #0f172a !important; border-right: none; }
-[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
-[data-testid="stSidebar"] .stButton button {
-    background: rgba(255,255,255,0.08) !important;
-    color: #e2e8f0 !important; border: 1px solid rgba(255,255,255,0.12) !important;
-}
-[data-testid="stSidebar"] .stButton button:hover { background: rgba(29,158,117,0.25) !important; }
-[data-testid="stSidebarNav"] a { color: #94a3b8 !important; }
-[data-testid="stSidebarNav"] a:hover, [data-testid="stSidebarNav"] a[aria-selected="true"] { color: #1D9E75 !important; }
-
-/* Force sidebar permanently open on desktop — hide both collapse and expand buttons */
-@media (min-width: 769px) {
-    [data-testid="stSidebar"] {
-        display: block !important;
-        visibility: visible !important;
-        transform: translateX(0px) !important;
-        min-width: 244px !important;
-    }
-    [data-testid="stSidebarCollapseButton"],
-    [data-testid="collapsedControl"],
-    [data-testid="stSidebarCollapsedControl"] {
-        display: none !important;
-    }
-}
-
-/* ── NC Logo ── */
-.nc-mark {
-    background: linear-gradient(135deg, #1D9E75 0%, #4f46e5 60%, #06b6d4 100%);
-    border-radius: 14px; width: 48px; height: 48px;
-    display: inline-flex; align-items: center; justify-content: center;
-    position: relative; box-shadow: 0 6px 20px rgba(29,158,117,0.35);
-    flex-shrink: 0;
-}
-.nc-mark-text { color: white; font-weight: 900; font-size: 17px; letter-spacing: -1px; }
-.nc-mark-dot {
-    position: absolute; top: 7px; right: 7px;
-    width: 7px; height: 7px;
-    background: #BA7517; border-radius: 50%;
-    box-shadow: 0 0 8px rgba(186,117,23,0.8);
-}
-.nc-logo-wrap { display: inline-flex; align-items: center; gap: 12px; }
-.nc-brand-name { font-size: 1.2rem; font-weight: 800; color: #0f172a !important; line-height: 1.1; }
-.nc-brand-sub  { font-size: 0.68rem; color: #64748b !important; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-
-/* ── Hero ── */
-.hero-wrap {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f2a1f 100%);
-    border-radius: 24px; padding: 48px 56px; margin-bottom: 32px;
-    position: relative; overflow: hidden;
-}
-.hero-wrap::before {
-    content: ''; position: absolute; top: -80px; right: -80px;
-    width: 320px; height: 320px;
-    background: radial-gradient(circle, rgba(29,158,117,0.2) 0%, transparent 70%);
-    border-radius: 50%;
-}
-.hero-wrap::after {
-    content: ''; position: absolute; bottom: -60px; left: 200px;
-    width: 240px; height: 240px;
-    background: radial-gradient(circle, rgba(79,70,229,0.15) 0%, transparent 70%);
-    border-radius: 50%;
-}
-.hero-title { font-size: 3rem; font-weight: 900; color: white; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 16px; }
-.hero-title .accent { color: #1D9E75; }
-.hero-sub { font-size: 1rem; color: #94a3b8; line-height: 1.75; max-width: 580px; margin-bottom: 28px; }
-.hero-role { font-size: 0.8rem; font-weight: 600; color: #1D9E75; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
-.hero-author { font-size: 1rem; font-weight: 700; color: #e2e8f0; }
-.hero-stat-row { display: flex; gap: 32px; margin-top: 32px; }
-.hero-stat-item { }
-.hero-stat-num { font-size: 1.6rem; font-weight: 900; color: white; line-height: 1; }
-.hero-stat-label { font-size: 0.72rem; color: #64748b; margin-top: 2px; font-weight: 500; }
-
-/* ── Feature pills ── */
-.feature-pill-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
-.feature-pill {
-    display: inline-flex; align-items: center; gap: 7px;
-    background: rgba(29,158,117,0.12); border: 1px solid rgba(29,158,117,0.3);
-    color: #1D9E75; font-size: 0.8rem; font-weight: 600;
-    padding: 7px 16px; border-radius: 999px;
-}
-
-/* ── Mobile nav bar (hidden on desktop) ── */
-.mobile-nav { display: none; }
-@media (max-width: 768px) {
-    .feature-pill { width: 100%; justify-content: center; }
-    .mobile-nav {
-        display: flex; gap: 10px; margin: 0 0 18px 0;
-    }
-    .mobile-nav a {
-        flex: 1; text-align: center; padding: 10px 8px;
-        background: rgba(29,158,117,0.12); border: 1px solid rgba(29,158,117,0.3);
-        color: #1D9E75 !important; font-size: 0.82rem; font-weight: 700;
-        border-radius: 12px; text-decoration: none;
-    }
-}
-
-/* ── Explainer card ── */
-.explainer-card {
-    background: white; border: 1px solid #e2e8f0;
-    border-left: 4px solid #1D9E75;
-    border-radius: 16px; padding: 24px 28px; margin-bottom: 24px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-}
-.explainer-title { font-size: 0.72rem; font-weight: 700; color: #1D9E75 !important; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
-.explainer-body  { font-size: 0.88rem; color: #1e293b !important; line-height: 1.75; margin-bottom: 20px; }
-.explainer-body strong { color: #0f172a !important; }
-.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.stat-box {
-    background: #f8fafc; border: 1px solid #e2e8f0;
-    border-radius: 12px; padding: 16px; text-align: center;
-}
-.stat-box-num { font-size: 1.5rem; font-weight: 900; color: #1D9E75 !important; }
-.stat-box-label { font-size: 0.7rem; color: #334155 !important; margin-top: 3px; }
-
-/* ── Session summary ── */
-.session-card {
-    background: white; border: 1px solid #e2e8f0; border-radius: 16px;
-    padding: 20px 24px; margin-bottom: 24px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-}
-
-/* ── Upload zone — hide only the outer custom label, not the Browse button ── */
-div[data-testid="stFileUploader"] > label {
-    display: none !important;
-}
-/* Force Browse files button always visible */
-div[data-testid="stFileUploaderDropzone"] button {
-    visibility: visible !important;
-    width: auto !important;
-    padding: 0.4rem 1rem !important;
-    pointer-events: auto !important;
-}
-
-/* ── Status badges ── */
-.badge-approved  { background:#dcfce7; color:#166534; border:1.5px solid #86efac; padding:6px 18px; border-radius:999px; font-weight:700; font-size:0.9rem; display:inline-flex; align-items:center; gap:6px; }
-.badge-denied    { background:#fee2e2; color:#991b1b; border:1.5px solid #fca5a5; padding:6px 18px; border-radius:999px; font-weight:700; font-size:0.9rem; display:inline-flex; align-items:center; gap:6px; }
-.badge-unknown   { background:#f1f5f9; color:#475569; border:1.5px solid #cbd5e1; padding:6px 18px; border-radius:999px; font-weight:700; font-size:0.9rem; display:inline-flex; align-items:center; gap:6px; }
-@keyframes pending-pulse { 0%{box-shadow:0 0 0 0 rgba(186,117,23,0.5)} 70%{box-shadow:0 0 0 10px rgba(186,117,23,0)} 100%{box-shadow:0 0 0 0 rgba(186,117,23,0)} }
-.badge-pending   { background:#fef3c7; color:#92400e; border:1.5px solid #fcd34d; padding:6px 18px; border-radius:999px; font-weight:700; font-size:0.9rem; display:inline-flex; align-items:center; gap:6px; animation:pending-pulse 2s infinite; }
-
-/* ── Field card (screenshot-style) ── */
-.field-card {
-    background: white; border: 1px solid #e2e8f0;
-    border-radius: 14px; overflow: hidden; margin-bottom: 12px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-    transition: box-shadow 0.2s;
-}
-.field-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
-.field-card-inner { padding: 14px 16px 10px; }
-.field-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.field-card-label  { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #475569 !important; }
-.field-card-value  { font-size: 0.98rem; font-weight: 700; color: #0f172a !important; margin-bottom: 4px; }
-.field-card-code   { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 10px; }
-.code-cpt  { color: #1D9E75 !important; }
-.code-icd  { color: #BA7517 !important; }
-.code-auth { color: #4f46e5 !important; }
-.code-npi  { color: #334155 !important; }
-.field-card-bar { height: 4px; background: #f1f5f9; }
-.field-card-bar-fill { height: 4px; border-radius: 0 4px 4px 0; transition: width 0.6s ease; }
-
-/* ── Confidence badge (inline) ── */
-.conf-pct-high   { background:#dcfce7; color:#166534; border:1px solid #86efac; font-size:0.7rem; padding:2px 9px; border-radius:20px; font-weight:700; white-space:nowrap; }
-.conf-pct-medium { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; font-size:0.7rem; padding:2px 9px; border-radius:20px; font-weight:700; white-space:nowrap; }
-.conf-pct-low    { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; font-size:0.7rem; padding:2px 9px; border-radius:20px; font-weight:700; white-space:nowrap; }
-
-/* ── Simple field row ── */
-.field-row {
-    display: flex; align-items: flex-start; gap: 12px;
-    padding: 9px 12px; border-bottom: 1px solid #f1f5f9;
-    border-radius: 8px; transition: background 0.15s;
-}
-.field-row:last-child { border-bottom: none; }
-.field-row:hover { background: #f8faff; }
-.field-label { color: #475569 !important; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; min-width: 160px; padding-top: 2px; }
-.field-value { color: #0f172a !important; font-size: 0.9rem; flex: 1; }
-.field-value.missing { color: #94a3b8 !important; font-style: italic; }
-
-/* ── Completeness bar ── */
-.comp-outer { background: #f1f5f9; border-radius: 6px; height: 7px; flex: 1; }
-
-/* ── Validation chips ── */
-.chip-error   { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; border-radius:6px; padding:3px 10px; font-size:0.76rem; margin:2px; display:inline-block; }
-.chip-warning { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; border-radius:6px; padding:3px 10px; font-size:0.76rem; margin:2px; display:inline-block; }
-
-/* ── Section header ── */
-.section-header { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #1D9E75 !important; margin: 18px 0 10px; }
-
-/* ── Section divider ── */
-.divider-wrap { display:flex; align-items:center; gap:14px; margin:40px 0 24px; }
-.divider-line  { flex:1; height:1px; background:#e2e8f0; }
-.divider-label { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#475569 !important; white-space:nowrap; }
-
-/* ── How it works ── */
-.step-card {
-    background: white; border: 1px solid #e2e8f0;
-    border-radius: 16px; padding: 24px; height: 100%;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-}
-.step-num-wrap {
-    background: linear-gradient(135deg, #1D9E75, #4f46e5);
-    color: white; border-radius: 10px; width: 38px; height: 38px;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 900; font-size: 1rem; margin-bottom: 14px;
-}
-.step-title { font-weight: 700; color: #0f172a !important; font-size: 0.95rem; margin-bottom: 6px; }
-.step-desc  { font-size: 0.83rem; color: #334155 !important; line-height: 1.6; }
-
-/* ── About card ── */
-.about-wrap {
-    background: linear-gradient(135deg, #0f172a, #1e293b);
-    border-radius: 20px; padding: 36px 40px; margin-top: 8px;
-}
-.about-avatar {
-    background: linear-gradient(135deg, #1D9E75, #4f46e5);
-    border-radius: 50%; width: 60px; height: 60px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem; font-weight: 900; color: white; flex-shrink:0;
-}
-.about-name { font-size: 1.25rem; font-weight: 800; color: white; }
-.about-role { font-size: 0.8rem; color: #1D9E75; font-weight: 600; margin-top: 2px; letter-spacing: 0.03em; }
-.about-body { font-size: 0.87rem; color: #94a3b8; line-height: 1.7; margin: 16px 0 24px; }
-.about-link {
-    display: inline-flex; align-items: center; gap: 7px;
-    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
-    color: #e2e8f0; text-decoration: none;
-    padding: 8px 16px; border-radius: 10px; font-size: 0.82rem; font-weight: 600;
-    margin-right: 10px; margin-bottom: 8px; transition: all 0.2s;
-}
-.about-link:hover { background: rgba(29,158,117,0.2); border-color: #1D9E75; color: #1D9E75; }
-.about-stat-row { display: flex; gap: 28px; margin-top: 28px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); }
-.about-stat-num   { font-size: 1.4rem; font-weight: 900; color: white; line-height: 1; }
-.about-stat-label { font-size: 0.68rem; color: #64748b; margin-top: 3px; }
-
-/* ── Demo form card ── */
-.demo-wrap {
-    background: white; border: 1px solid #e2e8f0; border-radius: 24px;
-    padding: 40px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);
-}
-.demo-title { font-size: 1.5rem; font-weight: 800; color: #0f172a !important; margin-bottom: 4px; }
-.demo-sub   { font-size: 0.9rem; color: #334155 !important; margin-bottom: 32px; }
-.demo-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #334155 !important; margin-bottom: 6px; }
-.required-star { color: #E24B4A !important; }
-
-/* ── Empty state ── */
-.empty-state { text-align:center; padding:48px 20px; border:2px dashed #e2e8f0; border-radius:20px; background:#fafafa; }
-.empty-state-icon  { font-size:2.5rem; margin-bottom:12px; }
-.empty-state-title { font-size:1rem; font-weight:700; color:#0f172a !important; margin-bottom:6px; }
-.empty-state-sub   { font-size:0.83rem; color:#334155 !important; max-width:360px; margin:0 auto; }
-
-/* ── Footer ── */
-.footer { text-align:center; font-size:0.76rem; color:#94a3b8; padding:20px 0; border-top:1px solid #e2e8f0; margin-top:40px; }
-.footer a { color:#1D9E75; text-decoration:none; }
-
-@media (max-width: 768px) {
-    .hero-title { font-size: 1.9rem; }
-    .hero-wrap  { padding: 28px 24px; }
-    .stat-grid  { grid-template-columns: 1fr; }
-    .about-stat-row { flex-wrap: wrap; gap: 16px; }
-}
-</style>
-
-""", unsafe_allow_html=True)
-
-# ── Constants ──────────────────────────────────────────────────────────────────
-REQUIRED_FIELDS = [
-    "patient_name","date_of_birth","member_id","provider_name",
-    "provider_npi","facility_name","diagnosis_code","treatment_requested",
-    "cpt_code","payor","plan_name","approval_status",
-]
-
-FIELD_TOOLTIPS = {
-    "patient_name":          "Full legal name of the patient as listed on the insurance plan",
-    "date_of_birth":         "Patient date of birth — YYYY-MM-DD format",
-    "member_id":             "Unique insurance member or policy ID number",
-    "provider_name":         "Name of the physician or provider submitting the request",
-    "provider_npi":          "National Provider Identifier — exactly 10 digits (CMS standard)",
-    "facility_name":         "Hospital or clinic where the procedure will be performed",
-    "diagnosis_code":        "ICD-10 codes identifying the diagnosis",
-    "diagnosis_description": "Plain-language description of the diagnosis",
-    "treatment_requested":   "The specific procedure, medication, or service being requested",
-    "cpt_code":              "CPT codes identifying the procedure (e.g. 96413 = IV infusion)",
-    "payor":                 "The insurance company that will make the authorization decision",
-    "plan_name":             "The specific insurance plan name and tier",
-    "approval_status":       "Final decision: Approved, Denied, Pending, or Unknown",
-    "approval_date":         "Date the payor made their authorization decision",
-    "denial_reason":         "Reason provided by the payor for denying the request",
-    "authorization_number":  "Unique auth number assigned by the payor when approved",
-    "notes":                 "Additional clinical notes or caveats from the document",
-}
-
-# Plain-English one-liners shown under jargon fields so non-healthcare
-# visitors understand what each code actually means.
-PLAIN_ENGLISH = {
-    "provider_npi":        "The doctor's national license number — we check it's real against the government registry.",
-    "diagnosis_code":      "ICD-10 — the standard code insurers use to identify a diagnosis.",
-    "cpt_code":            "CPT — the standard code for the procedure or treatment being requested.",
-    "authorization_number":"The reference number the insurer assigns once a request is approved.",
-    "member_id":           "The patient's insurance policy number.",
-    "payor":               "The insurance company deciding whether to approve this.",
-    "denial_reason":       "Why the insurer rejected the request — the basis for any appeal.",
-}
-
-def plain_note(key: str) -> str:
-    """Return a small grey explanatory line for a jargon field, or empty string."""
-    txt = PLAIN_ENGLISH.get(key)
-    if not txt:
-        return ""
-    return (
-        f'<div style="font-size:0.72rem;color:#64748b;line-height:1.5;'
-        f'margin-top:2px;font-style:italic">{txt}</div>'
-    )
-
-NC_LOGO_HTML = """
-<div class="nc-logo-wrap">
-  <div class="nc-mark">
-    <span class="nc-mark-text">NC</span>
-    <div class="nc-mark-dot"></div>
-  </div>
-  <div>
-    <div class="nc-brand-name">NovaClaim AI</div>
-    <div class="nc-brand-sub">Prior Auth Intelligence</div>
-  </div>
-</div>
-"""
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-CONF_LEVEL_TO_PCT = {"high": 95, "medium": 62, "low": 28}
-CONF_COLORS       = {"high": "#1D9E75", "medium": "#BA7517", "low": "#E24B4A"}
-CONF_CSS          = {"high": "conf-pct-high", "medium": "conf-pct-medium", "low": "conf-pct-low"}
-CONF_LABELS       = {"high": "High", "medium": "Medium", "low": "Low"}
-
-def list_or_str(val):
-    if isinstance(val, list): return ", ".join(str(v) for v in val if v)
-    return str(val) if val else None
-
-def status_badge(status):
-    icons = {"Approved": "✓", "Denied": "✕", "Pending": "⏳", "Unknown": "?"}
-    css   = {"Approved": "badge-approved", "Denied": "badge-denied", "Pending": "badge-pending", "Unknown": "badge-unknown"}
-    icon  = icons.get(status, "?")
-    cls   = css.get(status, "badge-unknown")
-    return f'<span class="{cls}"><span>{icon}</span> {status or "Unknown"}</span>'
-
-def completeness_score(result):
-    found = sum(1 for f in REQUIRED_FIELDS if result.get(f))
-    return int(found / len(REQUIRED_FIELDS) * 100)
-
-def render_completeness(score):
-    color = "#1D9E75" if score >= 80 else "#BA7517" if score >= 50 else "#E24B4A"
-    st.markdown(
-        f'<div style="display:flex;align-items:center;gap:12px;margin:8px 0 4px">'
-        f'<div class="comp-outer"><div style="width:{score}%;height:7px;border-radius:6px;background:{color}"></div></div>'
-        f'<span style="color:{color};font-weight:800;font-size:0.88rem;min-width:36px">{score}%</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-def render_field_card(label, key, value, conf_level=None, code_val=None, code_type=None):
-    """Styled card with confidence progress bar — used for clinical fields."""
-    val_str  = list_or_str(value)
-    lvl      = (conf_level or "low").lower()
-    pct      = CONF_LEVEL_TO_PCT.get(lvl, 28)
-    bar_col  = CONF_COLORS.get(lvl, "#E24B4A")
-    badge    = f'<span class="{CONF_CSS.get(lvl,"conf-pct-low")}">{CONF_LABELS.get(lvl,"—")}</span>'
-    val_html = f'<div class="field-card-value">{val_str}</div>' if val_str else '<div class="field-card-value" style="color:#cbd5e1;font-style:italic">Not found</div>'
-    code_html = ""
-    if code_val:
-        code_css = {"cpt": "code-cpt", "icd": "code-icd", "auth": "code-auth", "npi": "code-npi"}.get(code_type, "code-npi")
-        prefix   = {"cpt": "CPT", "icd": "ICD-10", "auth": "AUTH", "npi": "NPI"}.get(code_type, "")
-        code_html = f'<div class="field-card-code"><span class="{code_css}">{prefix}&nbsp;&nbsp;{code_val}</span></div>'
-    tooltip = FIELD_TOOLTIPS.get(key, "")
-    st.markdown(
-        f'<div class="field-card" title="{tooltip}">'
-        f'  <div class="field-card-inner">'
-        f'    <div class="field-card-header"><span class="field-card-label">{label}</span>{badge}</div>'
-        f'    {val_html}{code_html}{plain_note(key)}'
-        f'  </div>'
-        f'  <div class="field-card-bar"><div class="field-card-bar-fill" style="width:{pct}%;background:{bar_col}"></div></div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-def render_field_row(label, key, value, conf_level=None):
-    """Simple field row for metadata."""
-    val_str  = list_or_str(value)
-    val_html = f'<span class="field-value">{val_str}</span>' if val_str else '<span class="field-value missing">—</span>'
-    tooltip  = FIELD_TOOLTIPS.get(key, "")
-    note = plain_note(key)
-    st.markdown(
-        f'<div class="field-row" title="{tooltip}">'
-        f'  <span class="field-label">{label}</span>'
-        f'  <span style="flex:1">{val_html}{note}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-# ── Manual-review baseline (used for the time/cost comparison) ────────────────
-# Derived from the AMA prior authorization physician survey: practices report
-# ~13 hours per week spent on ~39 prior authorization requests, which works out
-# to roughly 20 minutes of combined physician + staff time per request.
-# Labour rate is a conservative fully-loaded US medical administrator estimate.
-MANUAL_MINUTES   = 20
-MANUAL_HOURLY    = 37.00
-AI_SECONDS_EST   = 22        # fallback only, for documents loaded from history
-AI_COST_EST      = 0.003     # rough upper bound on Groq inference cost per document
-
-
-def savings_card(elapsed_s: float | None = None) -> str:
-    """
-    Concrete time + money comparison between manual review and NovaClaim AI for
-    one document. Uses the measured processing time when it's available, so the
-    number on screen is what this document actually took.
-    """
-    measured  = elapsed_s is not None and elapsed_s > 0
-    ai_sec    = elapsed_s if measured else AI_SECONDS_EST
-    man_min   = MANUAL_MINUTES
-    man_cost  = MANUAL_HOURLY * (man_min / 60)
-    ai_cost   = AI_COST_EST
-    saved_min = man_min - (ai_sec / 60)
-    pct       = (1 - (ai_sec / 60) / man_min) * 100
-    ai_time   = f"{ai_sec:.0f} sec" if measured else f"~{ai_sec:.0f} sec"
-    timing_note = ("NovaClaim time was measured on this document, from upload to risk score, "
-                   "including all four verification agents."
-                   if measured else
-                   "NovaClaim time is a typical value; this document was loaded from history "
-                   "rather than processed in this session.")
-
-    def col(title, time_txt, cost_txt, color, bg, sub):
-        return (
-            f'<div style="flex:1;background:{bg};border:1px solid {color}33;'
-            f'border-radius:12px;padding:14px 16px;min-width:150px">'
-            f'<div style="font-size:0.63rem;font-weight:800;text-transform:uppercase;'
-            f'letter-spacing:0.1em;color:{color};margin-bottom:8px">{title}</div>'
-            f'<div style="font-size:1.35rem;font-weight:900;color:{color};line-height:1.1">{time_txt}</div>'
-            f'<div style="font-size:0.75rem;color:#475569;margin-top:3px">{cost_txt}</div>'
-            f'<div style="font-size:0.68rem;color:#94a3b8;margin-top:6px">{sub}</div>'
-            f'</div>'
-        )
-
-    return (
-        f'<div style="background:white;border:1px solid #e2e8f0;border-left:4px solid #1D9E75;'
-        f'border-radius:14px;padding:18px 22px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.04)">'
-        f'<div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;'
-        f'letter-spacing:0.12em;color:#1D9E75;margin-bottom:12px">What this just saved</div>'
-        f'<div style="display:flex;gap:12px;flex-wrap:wrap">'
-        + col("Manual review", f"{man_min} min", f"≈ ${man_cost:,.2f} in staff time",
-              "#E24B4A", "#fef2f2", "A person reads and re-keys every field")
-        + col("NovaClaim AI", ai_time, f"under ${ai_cost:.3f} in compute",
-              "#1D9E75", "#f0fdf4", "Parsed, verified and scored automatically")
-        + col("Difference", f"{saved_min:.0f} min saved", f"{pct:.1f}% faster",
-              "#4f46e5", "#eef2ff", "Per document, every single time")
-        + '</div>'
-        f'<div style="font-size:0.7rem;color:#94a3b8;margin-top:12px;line-height:1.5">'
-        f'Manual baseline: ~{MANUAL_MINUTES} min/request, derived from the AMA survey figure of '
-        f'13 hours per week across ~39 requests, at ${MANUAL_HOURLY:.0f}/hr fully-loaded admin cost. '
-        f'{timing_note}'
-        f'</div></div>'
-    )
-
-
-def risk_explained(risk_res) -> str:
-    """
-    Turn the numeric risk score into a sentence a non-expert understands,
-    plus the specific signals that drove it. A score without an explanation
-    reads as a black box.
-    """
-    if not risk_res:
-        return ""
-
-    score = risk_res.get("score", 0)
-    level = risk_res.get("level", "")
-    color = risk_res.get("color", "#5F5E5A")
-    bg    = risk_res.get("bg", "#f8fafc")
-
-    headline = {
-        "High Approval Likelihood": "This request looks likely to be approved.",
-        "Moderate Risk":            "This request could go either way.",
-        "High Denial Risk":         "This request is at high risk of being denied.",
-    }.get(level, "Approval outlook is unclear.")
-
-    plain = {
-        "High Approval Likelihood":
-            "The document is complete, the provider and codes check out against external "
-            "databases, and nothing obvious is missing.",
-        "Moderate Risk":
-            "Most of the document holds up, but there are gaps a reviewer is likely to "
-            "question before approving.",
-        "High Denial Risk":
-            "Important information is missing or failed verification. Claims like this are "
-            "commonly rejected on first submission — and each rejection restarts the clock "
-            "for the patient.",
-    }.get(level, "")
-
-    # Show the individual signals behind the number
-    rows = ""
-    for f in (risk_res.get("factors") or []):
-        ok    = f.get("positive")
-        icon  = "✓" if ok else "✗"
-        c     = "#1D9E75" if ok else "#E24B4A"
-        rows += (
-            f'<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;'
-            f'border-bottom:1px solid #f1f5f9">'
-            f'<span style="color:{c};font-weight:900;font-size:0.85rem;min-width:14px">{icon}</span>'
-            f'<div style="flex:1">'
-            f'<span style="font-size:0.82rem;font-weight:700;color:#0f172a">{f.get("label","")}</span>'
-            f'<span style="font-size:0.78rem;color:#64748b"> — {f.get("detail","")}</span></div>'
-            f'<span style="font-size:0.75rem;font-weight:800;color:{c};white-space:nowrap">'
-            f'{f.get("points",0)}/{f.get("max",0)}</span></div>'
-        )
-
-    return (
-        f'<div style="background:{bg};border:1.5px solid {color}44;border-left:5px solid {color};'
-        f'border-radius:14px;padding:18px 22px;margin-bottom:16px">'
-        f'<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px">'
-        f'<span style="font-size:1.6rem;font-weight:900;color:{color};line-height:1">{score}<span '
-        f'style="font-size:0.9rem;font-weight:700;opacity:0.6">/100</span></span>'
-        f'<span style="font-size:0.98rem;font-weight:800;color:#0f172a">{headline}</span>'
-        f'</div>'
-        f'<div style="font-size:0.85rem;color:#334155;line-height:1.7;margin-bottom:14px">{plain}'
-        f'<br><span style="font-size:0.75rem;color:#64748b">'
-        f'Higher scores mean a better chance of approval. This is a composite of five '
-        f'independent signals, shown below.</span></div>'
-        f'<div style="background:white;border-radius:10px;padding:6px 14px">{rows}</div>'
-        f'</div>'
-    )
-
-
-def fix_recommendations(result, risk_res, agent_res, issues) -> str:
-    """
-    Turn the diagnosis into a prescription: the specific things that would
-    raise this document's approval odds, with the point impact of each.
-    """
-    fixes = []
-
-    # Missing required fields, weighted by how much the scorer rewards completeness
-    FIELD_LABELS = {
-        "provider_npi":        ("Add the provider's NPI number",
-                                "Without it we can't verify the doctor exists — a common auto-denial trigger."),
-        "diagnosis_code":      ("Add the ICD-10 diagnosis code",
-                                "Insurers require a coded diagnosis to assess medical necessity."),
-        "cpt_code":            ("Add the CPT procedure code",
-                                "Identifies exactly what's being requested and whether it's covered."),
-        "member_id":           ("Add the patient's member ID",
-                                "The claim can't be matched to a policy without it."),
-        "facility_name":       ("Add the treating facility",
-                                "Some plans restrict coverage by site of service."),
-        "date_of_birth":       ("Add the patient's date of birth",
-                                "Used to confirm identity and eligibility."),
-        "plan_name":           ("Add the specific plan name",
-                                "Coverage rules differ significantly between plans."),
-        "treatment_requested": ("Describe the treatment requested",
-                                "The core of the request — reviewers reject vague submissions."),
-    }
-    per_field_pts = round(20 / len(REQUIRED_FIELDS))  # completeness is worth 20 pts total
-    for key, (label, why) in FIELD_LABELS.items():
-        if not result.get(key):
-            fixes.append((per_field_pts, label, why))
-
-    # Hard validation errors
-    for i in issues:
-        if i.get("severity") == "error":
-            fixes.append((5, f"Resolve: {i.get('message','validation error')}",
-                          "Hard validation errors are the strongest predictor of denial in our data."))
-
-    # Failed external verifications
-    if agent_res:
-        npi = (agent_res.get("npi_verification") or {}).get("status")
-        if npi in ("not_found", "invalid"):
-            fixes.append((10, "Correct the provider NPI — it didn't match the CMS registry",
-                          "An unverifiable provider is one of the fastest routes to rejection."))
-        bad_icd = [c for c in (agent_res.get("icd10_verification") or [])
-                   if c.get("status") in ("not_found", "invalid")]
-        if bad_icd:
-            fixes.append((8, f"Fix {len(bad_icd)} invalid diagnosis code(s)",
-                          "Codes that don't exist in the NIH database are rejected automatically."))
-
-    if not fixes:
-        return (
-            '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-left:5px solid #1D9E75;'
-            'border-radius:14px;padding:18px 22px;margin-bottom:16px">'
-            '<div style="font-size:0.95rem;font-weight:800;color:#166534;margin-bottom:4px">'
-            '✓ Nothing to fix</div>'
-            '<div style="font-size:0.85rem;color:#166534;opacity:0.9;line-height:1.7">'
-            'Every field we look for is present, and all four verification agents came back clean. '
-            'This document is ready to submit as-is.</div></div>'
-        )
-
-    # Highest-impact fixes first
-    fixes.sort(key=lambda x: -x[0])
-    rows = ""
-    for pts, label, why in fixes[:6]:
-        rows += (
-            f'<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;'
-            f'border-bottom:1px solid #f1f5f9">'
-            f'<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;'
-            f'border-radius:20px;padding:2px 9px;font-size:0.72rem;font-weight:800;'
-            f'white-space:nowrap;flex-shrink:0">+{pts} pts</span>'
-            f'<div><div style="font-size:0.85rem;font-weight:700;color:#0f172a;'
-            f'margin-bottom:2px">{label}</div>'
-            f'<div style="font-size:0.78rem;color:#64748b;line-height:1.55">{why}</div></div></div>'
-        )
-
-    potential = sum(p for p, _, _ in fixes)
-    current   = (risk_res or {}).get("score", 0)
-    projected = min(100, current + potential)
-
-    return (
-        f'<div style="background:white;border:1px solid #e2e8f0;border-left:5px solid #BA7517;'
-        f'border-radius:14px;padding:18px 22px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.04)">'
-        f'<div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;'
-        f'letter-spacing:0.12em;color:#BA7517;margin-bottom:6px">How to improve this before submitting</div>'
-        f'<div style="font-size:0.83rem;color:#475569;line-height:1.65;margin-bottom:10px">'
-        f'Fixing the items below would take this from <strong>{current}</strong> to roughly '
-        f'<strong>{projected}</strong> out of 100 — turning a likely denial into a likely approval.</div>'
-        f'{rows}</div>'
-    )
-
-
-def agent_story(agent_res, coverage_res) -> str:
-    """
-    Explain, in plain sentences, what each of the 4 agents actually checked
-    and what it found. Turns abstract badges into something a person can picture.
-    """
-    OK   = ("verified", "found", "valid")
-    BAD  = ("not_found", "invalid")
-
-    def card(num, color, title, body):
-        return (
-            f'<div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #f1f5f9">'
-            f'<div style="background:{color};color:white;border-radius:9px;min-width:28px;height:28px;'
-            f'display:flex;align-items:center;justify-content:center;font-weight:900;'
-            f'font-size:0.78rem;flex-shrink:0">{num}</div>'
-            f'<div><div style="font-weight:800;color:#0f172a;font-size:0.86rem;margin-bottom:3px">{title}</div>'
-            f'<div style="font-size:0.82rem;color:#475569;line-height:1.65">{body}</div></div></div>'
-        )
-
-    out = ""
-    a = agent_res or {}
-
-    # Agent 1 — NPI
-    npi = a.get("npi_verification") or {}
-    s   = npi.get("status")
-    if s in OK:
-        who = npi.get("registry_name") or "this provider"
-        spec = npi.get("registry_specialty")
-        body = (f"Took the doctor's license number off the form and looked it up in the "
-                f"US government's official CMS provider registry. It's real, and it belongs to "
-                f"<strong>{who}</strong>"
-                + (f", a {spec} specialist." if spec else "."))
-    elif s in BAD:
-        body = ("Looked up the doctor's license number in the US government's CMS registry "
-                "and <strong>could not find it</strong>. That's exactly the kind of error that "
-                "gets a claim rejected.")
-    else:
-        body = ("Checks the doctor's license number against the US government's official "
-                "CMS provider registry. No number was found on this document to check.")
-    out += card(1, "#1D9E75", "Is this doctor real?", body)
-
-    # Agent 2 — ICD-10
-    icd  = a.get("icd10_verification") or []
-    good = [c for c in icd if c.get("status") in OK]
-    bad  = [c for c in icd if c.get("status") in BAD]
-    if good and not bad:
-        body = (f"Checked {len(good)} diagnosis code{'s' if len(good) > 1 else ''} against the "
-                f"National Institutes of Health database. All valid and correctly formatted.")
-    elif bad:
-        body = (f"Checked the diagnosis codes against the NIH database — "
-                f"<strong>{len(bad)} didn't match a real code</strong>. Invalid codes are one of "
-                f"the most common reasons claims get denied.")
-    else:
-        body = ("Validates every diagnosis code against the National Institutes of Health "
-                "database. No codes were found on this document.")
-    out += card(2, "#4f46e5", "Are the diagnosis codes valid?", body)
-
-    # Agent 3 — FDA drug
-    drug = a.get("drug_verification") or {}
-    s    = drug.get("status")
-    if s in OK:
-        nm = drug.get("brand_name") or drug.get("generic_name") or "the requested drug"
-        body = (f"Searched the FDA's official drug database and confirmed <strong>{nm}</strong> "
-                f"is a real, approved medication.")
-    elif s in BAD:
-        body = ("Searched the FDA's drug database and <strong>couldn't find a match</strong> for "
-                "the requested medication — worth a second look before submitting.")
-    else:
-        body = ("Cross-references the requested medication against the FDA's official drug "
-                "database. No drug was identified on this document.")
-    out += card(3, "#06b6d4", "Is this a real, FDA-approved drug?", body)
-
-    # Agent 4 — CPT coverage
-    cov = (coverage_res or {}).get("cpt_coverage") or []
-    if cov:
-        req = [c for c in cov if c.get("status") in ("required", "likely_required")]
-        if req:
-            body = (f"Looked up the procedure code and confirmed this treatment "
-                    f"<strong>does require prior approval</strong> from the insurer — so this "
-                    f"paperwork is genuinely necessary.")
-        else:
-            body = ("Looked up the procedure code against payer coverage rules to determine "
-                    "whether prior approval is even required for this treatment.")
-    else:
-        body = ("Looks up the procedure code to determine whether this treatment actually "
-                "requires prior approval. No procedure code was found on this document.")
-    out += card(4, "#BA7517", "Does this even need prior approval?", body)
-
-    return out
-
-
-def human_summary(result, agent_res, risk_res, issues, score) -> str:
-    """
-    One plain-English paragraph explaining, to a non-healthcare reader,
-    exactly what the app just did to this document.
-    """
-    n_found = sum(1 for f in REQUIRED_FIELDS if result.get(f))
-    n_total = len(REQUIRED_FIELDS)
-
-    parts = [
-        f"We read this document and pulled out <strong>{n_found} of {n_total}</strong> "
-        f"required details automatically."
-    ]
-
-    # What the agents confirmed, in human terms
-    checks = []
-    if agent_res:
-        npi_v = agent_res.get("npi_verification") or {}
-        if npi_v.get("status") in ("verified", "found", "valid"):
-            name = npi_v.get("registry_name")
-            checks.append(
-                f"confirmed the doctor is a real, licensed provider"
-                + (f" ({name})" if name else "")
-                + " in the government's CMS registry"
-            )
-        elif npi_v.get("status") in ("not_found", "invalid"):
-            checks.append("could <strong>not</strong> confirm the doctor's license number — that's a red flag")
-
-        icd_v = agent_res.get("icd10_verification") or []
-        ok_icd = sum(1 for c in icd_v if c.get("status") in ("valid", "found", "verified"))
-        if ok_icd:
-            checks.append(f"verified {ok_icd} diagnosis code{'s' if ok_icd > 1 else ''} against the NIH database")
-
-        drug_v = agent_res.get("drug_verification") or {}
-        if drug_v.get("status") in ("found", "verified", "valid"):
-            checks.append("matched the requested drug to an official FDA record")
-
-    if checks:
-        parts.append("Our AI agents then " + ", ".join(checks) + ".")
-
-    # Risk, explained without jargon.
-    # NOTE: risk_scorer returns an APPROVAL-LIKELIHOOD score — higher is better.
-    # Levels are: "High Approval Likelihood" | "Moderate Risk" | "High Denial Risk".
-    if risk_res:
-        lvl = str(risk_res.get("level", ""))
-        sc  = risk_res.get("score")
-        if lvl == "High Approval Likelihood":
-            parts.append(
-                f"Based on how complete and consistent it is, this request looks "
-                f"<strong>likely to be approved</strong> (scoring {sc} out of 100, "
-                f"where higher is better)."
-            )
-        elif lvl == "High Denial Risk":
-            parts.append(
-                f"Because key information is missing or inconsistent, this request is "
-                f"<strong>at real risk of being denied</strong> (scoring only {sc} out of 100) — "
-                f"worth fixing before it's submitted."
-            )
-        else:
-            parts.append(
-                f"It sits in the middle (scoring {sc} out of 100) — "
-                f"a few gaps are worth closing before submitting."
-            )
-
-    n_err = sum(1 for i in issues if i.get("severity") == "error")
-    if n_err:
-        parts.append(
-            f"We also flagged <strong>{n_err} problem{'s' if n_err > 1 else ''}</strong> "
-            f"that a human reviewer would otherwise have to catch by hand."
-        )
-
-    return " ".join(parts)
-
-# ── Session state ──────────────────────────────────────────────────────────────
-if "history"             not in st.session_state: st.session_state.history = []
-if "explainer_dismissed" not in st.session_state: st.session_state.explainer_dismissed = False
-
-# ── Sidebar ────────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown(NC_LOGO_HTML, unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.divider()
-
-    if st.session_state.history:
-        st.markdown("**Session Documents**")
-        for item in reversed(st.session_state.history):
-            s    = item["result"].get("approval_status","Unknown")
-            icon = {"Approved":"🟢","Denied":"🔴","Pending":"🟡"}.get(s,"⚪")
-            score= completeness_score(item["result"])
-            st.markdown(f"{icon} **{item['filename']}**")
-            st.caption(f"{s} · {score}% complete · {item['timestamp']}")
-        st.markdown("")
-        if st.button("Clear Session", use_container_width=True):
-            st.session_state.history = []
-            st.rerun()
-    else:
-        st.caption("No documents parsed yet.")
-        st.markdown("")
-        st.markdown("""
-        <div style="background:rgba(29,158,117,0.12);border:1px solid rgba(29,158,117,0.25);border-radius:10px;padding:12px 14px;font-size:0.78rem;color:#94a3b8">
-        Upload a PDF or TXT prior auth document on the Home page to get started.
-        </div>""", unsafe_allow_html=True)
-
-# ── API key guard ──────────────────────────────────────────────────────────────
-if not _groq_key:
-    st.markdown(
-        '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-left:5px solid #E24B4A;'
-        'border-radius:14px;padding:20px 24px;margin:24px 0">'
-        '<div style="font-size:1rem;font-weight:800;color:#991b1b;margin-bottom:6px">⚙️ Setup Required</div>'
-        '<div style="font-size:0.87rem;color:#991b1b;line-height:1.7">'
-        'NovaClaim AI needs a Groq API key to run the AI parser.<br>'
-        'Add <code style="background:#fee2e2;padding:1px 6px;border-radius:4px">GROQ_API_KEY</code> '
-        'to <code style="background:#fee2e2;padding:1px 6px;border-radius:4px">.streamlit/secrets.toml</code> '
-        'and restart the app.<br>'
-        '<span style="font-size:0.78rem;opacity:0.8">Free key available at '
-        '<a href="https://console.groq.com" target="_blank" style="color:#991b1b">console.groq.com</a></span>'
-        '</div></div>',
-        unsafe_allow_html=True,
-    )
-    st.stop()
-
-# ── Hero ───────────────────────────────────────────────────────────────────────
-HERO_MIN_DOCS = 5   # below this, a live count reads as "nobody uses this"
-
-
-def hero_stats(total: int, ev: dict | None) -> list[tuple[str, str]]:
-    """
-    The (number, label) pairs shown in the hero. Every one is either measured or
-    a plain fact about the system; nothing is an unsourced estimate.
-    """
-    stats = []
-
-    # 1. Volume: the real count once it's meaningful, else what each parse yields.
-    if total >= HERO_MIN_DOCS:
-        stats.append((f"{total:,}", "PA form parsed" if total == 1 else "PA forms parsed"))
-    else:
-        stats.append(("12", "clinical fields extracted per form"))
-
-    # 2-3. Quality and speed, measured by `python evaluate.py` on the labeled test set.
-    if ev and ev.get("field_accuracy") is not None:
-        n = ev.get("n_docs") or 0
-        stats.append((f"{ev['field_accuracy'] * 100:.0f}%",
-                      f"field accuracy on a {n}-document synthetic test set"))
-        if ev.get("median_end_to_end_s"):
-            stats.append((f"{ev['median_end_to_end_s']:.0f}s",
-                          "median time to parse, verify and score"))
-
-    # 4. Architecture (always true).
-    stats.append(("4", "AI agents checking external databases"))
-    return stats
-
-
-def _hero_stat_block() -> str:
-    hs = _live_hero_stats()
-    return "".join(
-        f'<div><div style="font-size:1.5rem;font-weight:900;color:white">{num}</div>'
-        f'<div style="font-size:0.68rem;color:#64748b;margin-top:2px;max-width:150px">{label}</div></div>'
-        for num, label in hero_stats(hs["total"], hs["eval"])
-    )
-
-st.markdown(f"""
-<div class="hero-wrap">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:24px">
-    <div style="flex:1;min-width:300px">
-      <div class="nc-logo-wrap" style="margin-bottom:28px">
-        <div class="nc-mark"><span class="nc-mark-text">NC</span><div class="nc-mark-dot"></div></div>
-        <div>
-          <div style="font-size:1rem;font-weight:800;color:white;line-height:1.1">NovaClaim AI</div>
-          <div style="font-size:0.65rem;color:#475569;font-weight:600;letter-spacing:0.08em;text-transform:uppercase">Prior Auth Intelligence</div>
-        </div>
-      </div>
-      <div class="hero-title">Prior auth,<br>parsed in <span class="accent">seconds.</span></div>
-      <div style="border-left:3px solid #E24B4A;padding-left:16px;margin:0 0 20px 0;max-width:580px">
-        <div style="font-size:0.95rem;color:#e2e8f0;line-height:1.7;font-weight:500">
-          Physicians and their staff spend <strong style="color:white">13 hours a week</strong> —
-          nearly 40 requests — getting insurer approval for treatments they've already decided
-          their patients need.
-        </div>
-        <div style="font-size:0.87rem;color:#94a3b8;line-height:1.7;margin-top:8px">
-          <strong style="color:#fca5a5">More than 1 in 4 physicians (26%)</strong> report that these
-          delays have led to a serious adverse event for a patient in their care.
-        </div>
-        <div style="font-size:0.68rem;color:#475569;margin-top:8px">
-          Source: American Medical Association prior authorization physician survey
-        </div>
-      </div>
-      <div class="hero-sub">NovaClaim AI reads those documents automatically — extracting every field, verifying them against real government and FDA databases, and flagging what would get the claim denied before it's ever submitted.</div>
-      <div style="display:flex;gap:28px;margin-top:28px;flex-wrap:wrap">
-        {_hero_stat_block()}
-      </div>
-    </div>
-    <div style="text-align:right;min-width:200px">
-      <div class="hero-role">Built by</div>
-      <div class="hero-author">Aakash Mehta</div>
-      <div style="font-size:0.75rem;color:#64748b;margin-top:4px;font-weight:500">AI Implementation Analyst</div>
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Mobile nav (Analytics + History links, hidden on desktop) ──────────────────
-st.markdown("""
-<div class="mobile-nav">
-  <a href="/1_📊_Analytics" target="_self">📊 Analytics</a>
-  <a href="/2_📁_History" target="_self">📁 History</a>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Feature pills ──────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="feature-pill-row">
-  <span class="feature-pill">⚡ AI-powered extraction</span>
-  <span class="feature-pill">✓ NPI + ICD-10 validation</span>
-  <span class="feature-pill">⚖️ Denial appeal generator</span>
-  <span class="feature-pill">📊 Real-time analytics</span>
-  <span class="feature-pill">📁 PDF + TXT support</span>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Explainer ──────────────────────────────────────────────────────────────────
-if not st.session_state.explainer_dismissed:
-    st.markdown("""
-    <div class="explainer-card">
-      <div class="explainer-title">💡 What is Prior Authorization?</div>
-      <div class="explainer-body">
-        Before prescribing certain medications or performing procedures, doctors must get advance approval from the patient's insurance company —
-        called <strong>prior authorization</strong>. Each form contains patient info, diagnosis codes, treatment justification, and a final decision.
-        Physicians and their staff spend <strong>13 hours a week</strong> on these, and the industry spends
-        <strong>$1.3 billion a year</strong> administering them.
-        NovaClaim AI extracts, validates, and analyzes these documents in seconds.
-      </div>
-      <div class="stat-grid">
-        <div class="stat-box"><div class="stat-box-num">13 hrs</div><div class="stat-box-label">per physician, per week, on prior auth</div></div>
-        <div class="stat-box"><div class="stat-box-num">26%</div><div class="stat-box-label">of physicians report a resulting serious adverse event</div></div>
-        <div class="stat-box"><div class="stat-box-num">$1.3B</div><div class="stat-box-label">annual US prior auth administrative cost</div></div>
-      </div>
-      <div style="font-size:0.68rem;color:#94a3b8;margin-top:10px">
-        Sources: American Medical Association physician survey · CAQH Index
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("Dismiss ✕", key="dismiss_explainer"):
-        st.session_state.explainer_dismissed = True
-        st.rerun()
-
-# ── Session summary table ──────────────────────────────────────────────────────
-if st.session_state.history:
-    st.markdown('<div style="font-size:1.3rem;font-weight:900;color:#0f172a;margin-bottom:8px">📋 Session Summary</div>', unsafe_allow_html=True)
-    rows = []
-    for item in st.session_state.history:
-        r      = item["result"]
-        issues = validate_fields(r)
-        rows.append({
-            "File":     item["filename"],
-            "Patient":  r.get("patient_name") or "—",
-            "Status":   r.get("approval_status") or "—",
-            "Payor":    r.get("payor") or "—",
-            "Complete": f"{completeness_score(r)}%",
-            "Errors":   sum(1 for i in issues if i["severity"]=="error"),
-        })
-    st.dataframe(rows, use_container_width=True, hide_index=True)
-    st.markdown("")
-
-# ── Shared processing pipeline ─────────────────────────────────────────────────
-def _process_document(filename: str, doc_text: str) -> dict | None:
-    """
-    Parse + validate + persist + run all agents for one document.
-    Returns an entry dict, or None on failure. On failure the real exception
-    message is stored in st.session_state["_last_parse_error"] so the UI can
-    show what actually went wrong instead of a generic message.
-    """
-    _t0 = time.perf_counter()     # measured, so the savings card shows real time
-    try:
-        result = parse_prior_auth(doc_text)
-    except Exception as e:
-        st.session_state["_last_parse_error"] = f"{type(e).__name__}: {e}"
-        return None
-    issues    = validate_fields(result)
-    record_id = save_record(filename, result, issues)
-    try:
-        agent_res = _agent.validate_all(result)
-        save_agent_results(record_id, agent_res)
-    except Exception:
-        agent_res = None
-    try:
-        coverage_res = _coverage.check_all(result)
-    except Exception:
-        coverage_res = None
-    try:
-        risk_res = _risk.score(result, agent_res, coverage_res, issues)
-    except Exception:
-        risk_res = None
-    return {
-        "filename":     filename,
-        "result":       result,
-        "text":         doc_text,
-        "timestamp":    datetime.now().strftime("%H:%M:%S"),
-        "record_id":    record_id,
-        "agent_res":    agent_res,
-        "coverage_res": coverage_res,
-        "risk_res":     risk_res,
-        "elapsed_s":    time.perf_counter() - _t0,
-    }
-
-# Curated sample documents shown as one-click "Try a sample" buttons
-SAMPLE_DOCS = [
-    ("✅  Approved · Insulin",    "sample_approved_insulin.txt",   "#1D9E75", "#f0fdf4", "#86efac"),
-    ("❌  Denied · MRI",          "sample_denied_mri.txt",         "#E24B4A", "#fef2f2", "#fca5a5"),
-    ("⏳  Pending · Chemotherapy","sample_pending_chemo.txt",      "#BA7517", "#fffbeb", "#fcd34d"),
-]
-
-def _load_sample_text(fname: str) -> str | None:
-    try:
-        with open(os.path.join(os.path.dirname(__file__), fname), encoding="utf-8") as fh:
-            return fh.read()
-    except Exception:
-        return None
-
-# ── 3-step walkthrough (plain English, sits directly above the uploader) ───────
-st.markdown("""
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:8px 0 18px">
-  <div style="background:white;border:1px solid #e2e8f0;border-top:3px solid #1D9E75;
-              border-radius:14px;padding:16px 18px;box-shadow:0 2px 6px rgba(0,0,0,0.04)">
-    <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
-      <div style="background:#1D9E75;color:white;border-radius:8px;width:24px;height:24px;
-                  display:flex;align-items:center;justify-content:center;font-weight:900;font-size:0.8rem">1</div>
-      <div style="font-weight:800;color:#0f172a;font-size:0.88rem">Drop in a document</div>
-    </div>
-    <div style="font-size:0.8rem;color:#475569;line-height:1.6">
-      Any prior authorization form — a messy scanned PDF or plain text. No formatting required.
-    </div>
-  </div>
-  <div style="background:white;border:1px solid #e2e8f0;border-top:3px solid #4f46e5;
-              border-radius:14px;padding:16px 18px;box-shadow:0 2px 6px rgba(0,0,0,0.04)">
-    <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
-      <div style="background:#4f46e5;color:white;border-radius:8px;width:24px;height:24px;
-                  display:flex;align-items:center;justify-content:center;font-weight:900;font-size:0.8rem">2</div>
-      <div style="font-weight:800;color:#0f172a;font-size:0.88rem">AI reads and checks it</div>
-    </div>
-    <div style="font-size:0.8rem;color:#475569;line-height:1.6">
-      Pulls out 12 key details, then 4 AI agents verify them against real government
-      and FDA databases.
-    </div>
-  </div>
-  <div style="background:white;border:1px solid #e2e8f0;border-top:3px solid #BA7517;
-              border-radius:14px;padding:16px 18px;box-shadow:0 2px 6px rgba(0,0,0,0.04)">
-    <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
-      <div style="background:#BA7517;color:white;border-radius:8px;width:24px;height:24px;
-                  display:flex;align-items:center;justify-content:center;font-weight:900;font-size:0.8rem">3</div>
-      <div style="font-weight:800;color:#0f172a;font-size:0.88rem">See the denial risk</div>
-    </div>
-    <div style="font-size:0.8rem;color:#475569;line-height:1.6">
-      A machine learning model scores how likely this claim is to be rejected —
-      before anyone submits it.
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Upload zone ────────────────────────────────────────────────────────────────
-uploaded_files = st.file_uploader(
-    "📂  Drop your prior auth document here — PDF or TXT · Multiple files supported",
-    type=["pdf","txt"],
-    accept_multiple_files=True,
-)
-
-# ── Try a sample (no upload needed) ────────────────────────────────────────────
-st.markdown(
-    '<div style="display:flex;align-items:center;gap:10px;margin:16px 0 10px">'
-    '<div style="flex:1;height:1px;background:#e2e8f0"></div>'
-    '<span style="font-size:0.72rem;font-weight:700;text-transform:uppercase;'
-    'letter-spacing:0.1em;color:#64748b">No document handy? Try a sample</span>'
-    '<div style="flex:1;height:1px;background:#e2e8f0"></div></div>',
-    unsafe_allow_html=True,
-)
-_sc = st.columns(len(SAMPLE_DOCS))
-for _i, (_label, _fname, _fg, _bg, _bdr) in enumerate(SAMPLE_DOCS):
-    with _sc[_i]:
-        if st.button(_label, key=f"sample_{_fname}", use_container_width=True):
-            _txt = _load_sample_text(_fname)
-            if not _txt:
-                st.error(f"Could not load {_fname}")
+            server.login(sender, password)
+            server.sendmail(sender, [sender], mail.as_string())
+        return "sent"
+    except Exception as ex:
+        return f"error: {ex}"
+
+
+with c_col:
+    with st.form("contact", clear_on_submit=True):
+        H('<div style="font-weight:800;font-size:1.05rem;margin-bottom:4px">Send me a note</div>')
+        name = st.text_input("Your name")
+        email = st.text_input("Your email")
+        msg = st.text_area("Message", placeholder="Hiring for an AI implementation role? Feedback on the project?",
+                           height=110)
+        if st.form_submit_button("Send", width="stretch"):
+            if not name.strip() or "@" not in email or not msg.strip():
+                st.warning("Please add your name, a valid email and a message.")
             else:
-                with st.spinner(f"Parsing sample & running 4 agents…"):
-                    _entry = _process_document(_fname, _txt)
-                if _entry:
-                    st.session_state.history.append(_entry)
-                    st.rerun()
+                status = _send_message(name.strip(), email.strip(), msg.strip())
+                if status == "sent":
+                    st.success(f"Thanks, {name.strip()}. Your message is on its way. I'll reply to {email.strip()}.")
                 else:
-                    _err = st.session_state.get("_last_parse_error", "")
-                    if "model" in _err.lower() and ("not found" in _err.lower()
-                                                    or "decommission" in _err.lower()
-                                                    or "deprecat" in _err.lower()):
-                        st.error(
-                            "The configured Groq model is no longer available. "
-                            "Set a current model via the GROQ_MODEL secret — "
-                            "see console.groq.com/docs/models."
-                        )
-                    elif "authentication" in _err.lower() or "api key" in _err.lower() or "401" in _err:
-                        st.error("Groq rejected the API key. Check GROQ_API_KEY in your secrets.")
-                    elif "rate limit" in _err.lower() or "429" in _err:
-                        st.error("Groq rate limit reached. Wait a moment and try again.")
-                    else:
-                        st.error("Sample failed to parse.")
-                    if _err:
-                        with st.expander("Technical details"):
-                            st.code(_err)
-
-if not uploaded_files and not st.session_state.history:
-    st.markdown("""
-    <div class="empty-state">
-      <div class="empty-state-icon">🏥</div>
-      <div class="empty-state-title">Ready to parse</div>
-      <div class="empty-state-sub">Upload a prior auth document above, or click one of the samples — results appear here in seconds.</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-if uploaded_files:
-    fnames = ', '.join(f.name for f in uploaded_files)
-    st.markdown(
-        f'<div style="background:#eff6ff;border:1.5px solid #93c5fd;border-radius:12px;'
-        f'padding:10px 16px;color:#1e40af;font-weight:600;font-size:0.85rem;margin-bottom:8px">'
-        f'📎 {len(uploaded_files)} file(s) ready: {fnames}</div>',
-        unsafe_allow_html=True,
-    )
-    if st.button("🔍  Parse All Documents", type="primary", use_container_width=True):
-        prog = st.progress(0, text="Initializing…")
-        newly = []
-        for idx, uf in enumerate(uploaded_files):
-            prog.progress(idx/len(uploaded_files), text=f"Parsing {uf.name} ({idx+1}/{len(uploaded_files)})…")
-            file_bytes = uf.read()
-            try:
-                doc_text = extract_text_from_pdf(file_bytes) if uf.name.endswith(".pdf") else extract_text_from_txt(file_bytes)
-                if not doc_text:
-                    st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 16px;color:#991b1b;font-weight:600;font-size:0.85rem">✕ Could not extract text from <strong>{uf.name}</strong></div>', unsafe_allow_html=True)
-                    continue
-            except Exception as e:
-                st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 16px;color:#991b1b;font-weight:600;font-size:0.85rem">✕ Could not read <strong>{uf.name}</strong>: {e}</div>', unsafe_allow_html=True)
-                continue
-
-            prog.progress(
-                (idx + 0.6) / len(uploaded_files),
-                text=f"Verifying {uf.name} against external databases…",
-            )
-            entry = _process_document(uf.name, doc_text)
-            if not entry:
-                _err = st.session_state.get("_last_parse_error", "")
-                st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 16px;color:#991b1b;font-weight:600;font-size:0.85rem">✕ Failed to parse <strong>{uf.name}</strong></div>', unsafe_allow_html=True)
-                if _err:
-                    with st.expander(f"Why did {uf.name} fail?"):
-                        st.code(_err)
-                continue
-            st.session_state.history.append(entry)
-            newly.append(entry)
-        prog.progress(1.0, text="Done!")
-        st.markdown(
-            f'<div style="background:#f0fdf4;border:1.5px solid #86efac;border-left:4px solid #1D9E75;'
-            f'border-radius:12px;padding:12px 16px;color:#166534;font-weight:700;font-size:0.9rem;margin-top:8px">'
-            f'✓ Parsed <strong>{len(newly)}</strong> document(s) successfully.</div>',
-            unsafe_allow_html=True,
-        )
-
-# ── Document results ───────────────────────────────────────────────────────────
-if st.session_state.history:
-    st.markdown("")
-    st.markdown('<div style="font-size:1.3rem;font-weight:900;color:#0f172a;margin-bottom:12px">📄 Document Results</div>', unsafe_allow_html=True)
-
-    for idx, entry in enumerate(reversed(st.session_state.history)):
-        result   = entry["result"]
-        doc_text = entry["text"]
-        conf     = result.get("confidence",{})
-        issues   = validate_fields(result)
-        status   = result.get("approval_status","Unknown")
-        score    = completeness_score(result)
-        errors   = [i for i in issues if i["severity"]=="error"]
-        warnings = [i for i in issues if i["severity"]=="warning"]
-        icon     = {"Approved":"🟢","Denied":"🔴","Pending":"🟡"}.get(status,"⚪")
-
-        # Load agent results — from session (if just uploaded) or from DB
-        agent_res    = entry.get("agent_res")
-        if agent_res is None and entry.get("record_id"):
-            agent_res = get_agent_results(entry["record_id"])
-            entry["agent_res"] = agent_res
-
-        coverage_res = entry.get("coverage_res")
-        risk_res     = entry.get("risk_res")
-
-        # ── Compute mini verification badge summary ────────────────────────
-        def _badge_pill(label, status_val):
-            BADGE = {
-                "verified": ("#1D9E75","#f0fdf4","✓"),
-                "found":    ("#1D9E75","#f0fdf4","✓"),
-                "valid":    ("#1D9E75","#f0fdf4","✓"),
-                "name_mismatch": ("#BA7517","#fffbeb","⚠"),
-                "not_found": ("#E24B4A","#fef2f2","✗"),
-                "invalid":   ("#E24B4A","#fef2f2","✗"),
-                "timeout":   ("#5F5E5A","#f8fafc","⏱"),
-                "error":     ("#BA7517","#fffbeb","⚠"),
-            }
-            fg, bg, ic = BADGE.get(status_val, ("#5F5E5A","#f8fafc","—"))
-            return (
-                f'<span style="background:{bg};color:{fg};border:1px solid {fg}33;'
-                f'border-radius:20px;padding:3px 10px;font-size:0.72rem;font-weight:700;'
-                f'letter-spacing:0.03em;white-space:nowrap">{ic} {label}</span>'
-            )
-
-        badge_pills = ""
-        if agent_res:
-            npi_v  = agent_res.get("npi_verification")
-            icd_v  = agent_res.get("icd10_verification", [])
-            drug_v = agent_res.get("drug_verification")
-            if npi_v:
-                badge_pills += _badge_pill("NPI", npi_v.get("status","error")) + " "
-            if icd_v:
-                # summarise: worst status across all codes
-                order = ["invalid","not_found","timeout","error","name_mismatch","found","valid","verified"]
-                worst = sorted(icd_v, key=lambda x: order.index(x.get("status","error")) if x.get("status","error") in order else 0)[0]
-                badge_pills += _badge_pill("ICD-10", worst.get("status","error")) + " "
-            if drug_v:
-                badge_pills += _badge_pill("Drug", drug_v.get("status","error"))
-
-        # Coverage badge
-        if coverage_res:
-            cov_list = coverage_res.get("cpt_coverage", [])
-            if cov_list:
-                # Pick worst coverage status across all CPTs
-                cov_order  = {"required": 0, "likely_required": 1, "check_plan": 2, "not_required": 3, "unknown": 4}
-                worst_cov  = sorted(cov_list, key=lambda x: cov_order.get(x.get("status","unknown"), 4))[0]
-                cov_status = worst_cov.get("status", "unknown")
-                cov_pill_s = {
-                    "required":        ("PA Required",   "#E24B4A", "#fef2f2"),
-                    "likely_required": ("PA Likely",     "#BA7517", "#fffbeb"),
-                    "check_plan":      ("Check Plan",    "#5F5E5A", "#f8fafc"),
-                    "not_required":    ("No PA Needed",  "#1D9E75", "#f0fdf4"),
-                    "unknown":         ("Coverage ?",    "#5F5E5A", "#f8fafc"),
-                }.get(cov_status, ("Coverage ?", "#5F5E5A", "#f8fafc"))
-                cov_label, cov_fg, cov_bg = cov_pill_s
-                badge_pills += (
-                    f' <span style="background:{cov_bg};color:{cov_fg};border:1px solid {cov_fg}33;'
-                    f'border-radius:20px;padding:3px 10px;font-size:0.72rem;font-weight:700;'
-                    f'letter-spacing:0.03em;white-space:nowrap">{cov_label}</span>'
-                )
-
-        # Risk score pill
-        if risk_res:
-            rs = risk_res["score"]
-            rc = risk_res["color"]
-            rl = risk_res["level"]
-            badge_pills += (
-                f' <span style="background:{risk_res["bg"]};color:{rc};border:1px solid {rc}33;'
-                f'border-radius:20px;padding:3px 10px;font-size:0.72rem;font-weight:700;'
-                f'letter-spacing:0.03em;white-space:nowrap">'
-                f'{risk_res["icon"]} {rs}/100 · {rl}</span>'
-            )
-
-        badge_row = (
-            f'<span style="margin-left:8px;display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap">{badge_pills}</span>'
-            if badge_pills else ""
-        )
-
-        with st.expander(f"{entry['filename']}  [{status}  ·  {score}% complete]", expanded=(idx==0)):
-            # ── Status banner ──────────────────────────────────────────────────
-            banner_bg   = {"Approved":"#f0fdf4","Denied":"#fef2f2","Pending":"#fffbeb","Unknown":"#f8fafc"}.get(status,"#f8fafc")
-            banner_bdr  = {"Approved":"#86efac","Denied":"#fca5a5","Pending":"#fcd34d","Unknown":"#e2e8f0"}.get(status,"#e2e8f0")
-            banner_acc  = {"Approved":"#1D9E75","Denied":"#E24B4A","Pending":"#BA7517","Unknown":"#64748b"}.get(status,"#64748b")
-            bar_color   = {"Approved":"#1D9E75","Denied":"#E24B4A","Pending":"#BA7517","Unknown":"#94a3b8"}.get(status,"#94a3b8")
-
-            st.markdown(
-                f'<div style="background:{banner_bg};border:1.5px solid {banner_bdr};border-left:5px solid {banner_acc};'
-                f'border-radius:14px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">'
-                f'  <div>{status_badge(status)}</div>'
-                f'  <div style="flex:1;min-width:200px">'
-                f'    <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:{banner_acc};margin-bottom:5px">Extraction Completeness</div>'
-                f'    <div style="display:flex;align-items:center;gap:10px">'
-                f'      <div style="flex:1;background:#e2e8f0;border-radius:6px;height:7px">'
-                f'        <div style="width:{score}%;height:7px;border-radius:6px;background:{bar_color}"></div>'
-                f'      </div>'
-                f'      <span style="color:{bar_color};font-weight:900;font-size:0.9rem;min-width:38px">{score}%</span>'
-                f'    </div>'
-                f'  </div>'
-                f'  <div style="font-size:0.75rem;color:#64748b;font-weight:500">⏱ {entry["timestamp"]}</div>'
-                f'  {badge_row}'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-            # ── Plain-English "what just happened" card ────────────────────────
-            st.markdown(
-                f'<div style="background:linear-gradient(135deg,#f8fafc,#f0fdf4);'
-                f'border:1px solid #cbd5e1;border-left:4px solid #4f46e5;'
-                f'border-radius:14px;padding:18px 22px;margin-bottom:16px">'
-                f'<div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;'
-                f'letter-spacing:0.12em;color:#4f46e5;margin-bottom:8px">In plain English</div>'
-                f'<div style="font-size:0.9rem;color:#1e293b;line-height:1.8">'
-                f'{human_summary(result, agent_res, risk_res, issues, score)}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-            # ── Concrete time + cost saved on this document ────────────────────
-            st.markdown(savings_card(entry.get("elapsed_s")), unsafe_allow_html=True)
-
-            if errors or warnings:
-                chips  = "".join(f'<span style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:4px 10px;font-size:0.78rem;font-weight:600;margin:2px;display:inline-block">✕ {i["message"]}</span>' for i in errors)
-                chips += "".join(f'<span style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:8px;padding:4px 10px;font-size:0.78rem;font-weight:600;margin:2px;display:inline-block">⚠ {i["message"]}</span>' for i in warnings)
-                st.markdown(f'<div style="margin-bottom:12px">{chips}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(
-                    '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;'
-                    'padding:10px 16px;color:#166534;font-weight:700;font-size:0.85rem;margin-bottom:12px">'
-                    '✓ All validation checks passed</div>',
-                    unsafe_allow_html=True,
-                )
-
-            SH = "font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;color:#1D9E75;margin:16px 0 10px;display:block"
-
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-                "👤 Patient & Insurance",
-                "🩺 Clinical",
-                "📋 Authorization",
-                "📄 Before / After",
-                "🔬 Agent Verified",
-                "📋 Coverage",
-                "🎯 Risk Score",
-            ])
-
-            with tab1:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f'<span style="{SH}">Patient</span>', unsafe_allow_html=True)
-                    render_field_row("Name",          "patient_name",  result.get("patient_name"),  conf.get("patient_name"))
-                    render_field_row("Date of Birth", "date_of_birth", result.get("date_of_birth"), conf.get("date_of_birth"))
-                    render_field_row("Member ID",     "member_id",     result.get("member_id"),     conf.get("member_id"))
-                with col2:
-                    st.markdown(f'<span style="{SH}">Insurance</span>', unsafe_allow_html=True)
-                    render_field_row("Payor",     "payor",     result.get("payor"),     conf.get("payor"))
-                    render_field_row("Plan Name", "plan_name", result.get("plan_name"), conf.get("plan_name"))
-
-            with tab2:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f'<span style="{SH}">Provider</span>', unsafe_allow_html=True)
-                    render_field_row("Provider",  "provider_name", result.get("provider_name"), conf.get("provider_name"))
-                    npi_val = list_or_str(result.get("provider_npi"))
-                    render_field_card("Provider NPI", "provider_npi", result.get("provider_npi"), conf.get("provider_npi"), npi_val, "npi")
-                    render_field_row("Facility", "facility_name", result.get("facility_name"), conf.get("facility_name"))
-                with col2:
-                    st.markdown(f'<span style="{SH}">Diagnosis & Treatment</span>', unsafe_allow_html=True)
-                    diag_code = list_or_str(result.get("diagnosis_code"))
-                    render_field_card("Diagnosis Code", "diagnosis_code", result.get("diagnosis_description"), conf.get("diagnosis_code"), diag_code, "icd")
-                    cpt_code = list_or_str(result.get("cpt_code"))
-                    render_field_card("Requested Procedure", "cpt_code", result.get("treatment_requested"), conf.get("cpt_code"), cpt_code, "cpt")
-
-            with tab3:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f'<span style="{SH}">Authorization</span>', unsafe_allow_html=True)
-                    auth_num = result.get("authorization_number")
-                    render_field_card("Authorization Number", "authorization_number", auth_num, conf.get("authorization_number"), auth_num, "auth")
-                    render_field_row("Approval Date", "approval_date", result.get("approval_date"), conf.get("approval_date"))
-                with col2:
-                    st.markdown(f'<span style="{SH}">Denial & Notes</span>', unsafe_allow_html=True)
-                    if result.get("denial_reason"):
-                        render_field_card("Denial Reason", "denial_reason", result.get("denial_reason"), conf.get("denial_reason"))
-                    if result.get("notes"):
-                        render_field_row("Notes", "notes", result.get("notes"), conf.get("notes"))
-
-                if status == "Denied":
-                    st.divider()
-                    appeal_key = f"appeal_letter_{idx}_{entry['filename']}"
-
-                    st.markdown(
-                        '<div style="background:#fef2f2;border:1.5px solid #fca5a5;'
-                        'border-left:5px solid #E24B4A;border-radius:14px;'
-                        'padding:16px 20px;margin-bottom:16px;display:flex;align-items:flex-start;gap:14px">'
-                        '<div style="font-size:1.5rem;line-height:1">⚖️</div>'
-                        '<div><div style="font-size:0.95rem;font-weight:800;color:#991b1b;margin-bottom:3px">'
-                        'Appeal Letter Generator</div>'
-                        '<div style="font-size:0.82rem;color:#991b1b;opacity:0.85">'
-                        'Generates a complete, clinically-grounded appeal letter using ICD-10 '
-                        'official descriptions, coverage policy, and evidence-based guidelines. '
-                        'Ready to print and send.</div></div></div>',
-                        unsafe_allow_html=True,
-                    )
-
-                    btn_col, _ = st.columns([1, 3])
-                    with btn_col:
-                        if st.button(
-                            "✉ Generate Appeal Letter",
-                            key=f"appeal_btn_{idx}_{entry['filename']}",
-                            type="primary",
-                        ):
-                            with st.spinner("Drafting clinical appeal letter…"):
-                                try:
-                                    appeal_out = _appeal_agent.generate(
-                                        result,
-                                        agent_res=entry.get("agent_res"),
-                                        coverage_res=entry.get("coverage_res"),
-                                    )
-                                    st.session_state[appeal_key] = appeal_out
-                                except Exception as e:
-                                    st.session_state[appeal_key] = {"error": str(e)}
-
-                    appeal_out = st.session_state.get(appeal_key)
-
-                    if appeal_out:
-                        if "error" in appeal_out:
-                            st.markdown(
-                                f'<div style="background:#fef2f2;border:1px solid #fca5a5;'
-                                f'border-radius:10px;padding:12px 16px;color:#991b1b;'
-                                f'font-size:0.83rem;font-weight:600">✕ {appeal_out["error"]}</div>',
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            letter = appeal_out["letter"]
-                            meta   = appeal_out.get("metadata", {})
-
-                            # ── Letter card — looks like a real printed letter ──
-                            # Convert plain newlines to <br> for HTML rendering
-                            letter_html = letter.replace("\n\n", "</p><p style='margin:0 0 14px 0'>").replace("\n", "<br>")
-
-                            st.markdown(
-                                '<div style="background:white;border:1px solid #e2e8f0;'
-                                'border-radius:16px;padding:0;overflow:hidden;'
-                                'box-shadow:0 4px 24px rgba(0,0,0,0.08);margin-top:16px">'
-
-                                # Letter header bar
-                                '<div style="background:linear-gradient(135deg,#0f172a,#1e293b);'
-                                'padding:18px 28px;display:flex;justify-content:space-between;align-items:center">'
-                                '<div style="color:white;font-weight:800;font-size:0.95rem">'
-                                '✉ Prior Authorization Appeal Letter</div>'
-                                f'<div style="color:#94a3b8;font-size:0.75rem">{meta.get("date","")}</div>'
-                                '</div>'
-
-                                # Letter body — cream paper feel
-                                '<div style="background:#fefefe;padding:36px 44px;'
-                                'font-family:Georgia,serif;font-size:0.88rem;line-height:1.8;'
-                                'color:#1e293b;border-bottom:1px solid #e2e8f0">'
-                                f'<p style="margin:0 0 14px 0">{letter_html}</p>'
-                                '</div>'
-
-                                # Footer strip
-                                '<div style="background:#f8fafc;padding:12px 28px;'
-                                'display:flex;justify-content:space-between;align-items:center">'
-                                f'<div style="font-size:0.72rem;color:#64748b">'
-                                f'Patient: <strong>{meta.get("patient","")}</strong> · '
-                                f'Member ID: <strong>{meta.get("member_id","")}</strong> · '
-                                f'Payor: <strong>{meta.get("payor","")}</strong></div>'
-                                '<div style="font-size:0.72rem;color:#1D9E75;font-weight:700">'
-                                'Generated by NovaClaim AI</div>'
-                                '</div>'
-                                '</div>',
-                                unsafe_allow_html=True,
-                            )
-
-                            # ── Download + Copy buttons ────────────────────────
-                            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-                            dl_col, cp_col, _ = st.columns([1, 1, 3])
-                            with dl_col:
-                                filename_safe = entry['filename'].rsplit('.', 1)[0].replace(' ', '_')
-                                st.download_button(
-                                    "⬇ Download Letter (.txt)",
-                                    data=letter,
-                                    file_name=f"appeal_{filename_safe}.txt",
-                                    mime="text/plain",
-                                    key=f"appeal_dl_{idx}_{entry['filename']}",
-                                )
-                            with cp_col:
-                                # Show the ICD-10 guideline used
-                                guideline = meta.get("guideline", "")
-                                if guideline:
-                                    st.markdown(
-                                        f'<div style="font-size:0.72rem;color:#475569;padding-top:10px">'
-                                        f'📚 Ref: {guideline[:60]}{"…" if len(guideline)>60 else ""}</div>',
-                                        unsafe_allow_html=True,
-                                    )
-
-            with tab4:
-                st.markdown(
-                    '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #4f46e5;'
-                    'border-radius:12px;padding:14px 18px;margin-bottom:16px">'
-                    '<div style="font-size:0.9rem;font-weight:800;color:#1e40af;margin-bottom:3px">'
-                    'This is the part that used to take 45 minutes</div>'
-                    '<div style="font-size:0.83rem;color:#1e40af;opacity:0.9;line-height:1.6">'
-                    'On the left is the raw, unstructured document exactly as it arrived. '
-                    'On the right is what the AI pulled out of it — automatically, in seconds. '
-                    'A human would normally read the left side and type the right side by hand.</div>'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
-
-                raw_col, out_col = st.columns(2)
-
-                with raw_col:
-                    st.markdown(
-                        '<div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;'
-                        'letter-spacing:0.1em;color:#E24B4A;margin-bottom:8px">'
-                        '📄 Before — raw document</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.text_area(
-                        "", doc_text, height=460,
-                        key=f"doc_{idx}_{entry['filename']}",
-                        label_visibility="collapsed",
-                    )
-
-                with out_col:
-                    st.markdown(
-                        '<div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;'
-                        'letter-spacing:0.1em;color:#1D9E75;margin-bottom:8px">'
-                        '✨ After — structured by AI</div>',
-                        unsafe_allow_html=True,
-                    )
-                    _pairs = [
-                        ("Patient",        result.get("patient_name")),
-                        ("Date of Birth",  result.get("date_of_birth")),
-                        ("Member ID",      result.get("member_id")),
-                        ("Provider",       result.get("provider_name")),
-                        ("Provider NPI",   result.get("provider_npi")),
-                        ("Facility",       result.get("facility_name")),
-                        ("Diagnosis Code", list_or_str(result.get("diagnosis_code"))),
-                        ("Diagnosis",      list_or_str(result.get("diagnosis_description"))),
-                        ("Treatment",      result.get("treatment_requested")),
-                        ("CPT Code",       list_or_str(result.get("cpt_code"))),
-                        ("Payor",          result.get("payor")),
-                        ("Plan",           result.get("plan_name")),
-                        ("Status",         result.get("approval_status")),
-                        ("Auth Number",    result.get("authorization_number")),
-                    ]
-                    _rows = ""
-                    for _lbl, _val in _pairs:
-                        if _val:
-                            _v = f'<span style="color:#0f172a;font-weight:700">{_val}</span>'
-                        else:
-                            _v = '<span style="color:#cbd5e1;font-style:italic">not found</span>'
-                        _rows += (
-                            f'<div style="display:flex;gap:10px;padding:7px 0;'
-                            f'border-bottom:1px solid #f1f5f9">'
-                            f'<span style="min-width:120px;font-size:0.68rem;font-weight:700;'
-                            f'text-transform:uppercase;letter-spacing:0.06em;color:#64748b;'
-                            f'padding-top:2px">{_lbl}</span>'
-                            f'<span style="font-size:0.85rem;flex:1">{_v}</span></div>'
-                        )
-                    st.markdown(
-                        f'<div style="background:white;border:1px solid #86efac;'
-                        f'border-radius:12px;padding:10px 16px;height:460px;overflow-y:auto;'
-                        f'box-shadow:0 2px 8px rgba(29,158,117,0.12)">{_rows}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-            with tab5:
-                # ── Agent Verified tab ──────────────────────────────────────
-                # agent_res is already loaded above (auto-ran on upload or from DB)
-
-                # Header banner
-                st.markdown(
-                    '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:14px;'
-                    'padding:16px 20px;margin-bottom:16px;display:flex;align-items:flex-start;gap:14px">'
-                    '<div style="font-size:1.6rem;line-height:1">🔬</div>'
-                    '<div><div style="font-size:0.95rem;font-weight:800;color:#166534;margin-bottom:3px">'
-                    'Validation Agent — Real API Verification</div>'
-                    '<div style="font-size:0.82rem;color:#166534;opacity:0.85">'
-                    'CMS NPI Registry · NIH ICD-10 · OpenFDA — verified automatically on upload. '
-                    'Re-run anytime to refresh.</div></div></div>',
-                    unsafe_allow_html=True,
-                )
-
-                # ── What the 4 agents actually did, in plain English ───────────
-                st.markdown(
-                    f'<div style="background:white;border:1px solid #e2e8f0;'
-                    f'border-left:4px solid #1D9E75;border-radius:14px;'
-                    f'padding:18px 22px;margin-bottom:18px;box-shadow:0 2px 8px rgba(0,0,0,0.04)">'
-                    f'<div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;'
-                    f'letter-spacing:0.12em;color:#1D9E75;margin-bottom:6px">'
-                    f'What the 4 AI agents checked</div>'
-                    f'<div style="font-size:0.8rem;color:#64748b;line-height:1.6;margin-bottom:6px">'
-                    f'Each agent independently queried a real external database — '
-                    f'no guessing, no hallucination.</div>'
-                    f'{agent_story(agent_res, coverage_res)}'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-
-                if st.button("↺ Re-run Agent", key=f"agent_btn_{idx}_{entry['filename']}"):
-                    with st.spinner("Contacting external APIs…"):
-                        agent_res = _agent.validate_all(result)
-                        entry["agent_res"] = agent_res
-                        if entry.get("record_id"):
-                            save_agent_results(entry["record_id"], agent_res)
-
-                if agent_res:
-                    # ── helpers for status chips ──────────────────────────
-                    STATUS_ICON = {
-                        "verified":      ("✓", "#1D9E75", "#f0fdf4", "#86efac"),
-                        "found":         ("✓", "#1D9E75", "#f0fdf4", "#86efac"),
-                        "valid":         ("✓", "#1D9E75", "#f0fdf4", "#86efac"),
-                        "name_mismatch": ("⚠", "#BA7517", "#fffbeb", "#fcd34d"),
-                        "not_found":     ("✗", "#E24B4A", "#fef2f2", "#fca5a5"),
-                        "invalid":       ("✗", "#E24B4A", "#fef2f2", "#fca5a5"),
-                        "timeout":       ("⏱", "#5F5E5A", "#f8fafc", "#e2e8f0"),
-                        "error":         ("⚠", "#BA7517", "#fffbeb", "#fcd34d"),
-                    }
-
-                    def _chip(label, value, accent="#1D9E75"):
-                        return (
-                            f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                            f'padding:6px 0;border-bottom:1px solid #f1f5f9">'
-                            f'<span style="font-size:0.78rem;color:#64748b;font-weight:600">{label}</span>'
-                            f'<span style="font-size:0.82rem;font-weight:700;color:{accent}">{value}</span>'
-                            f'</div>'
-                        )
-
-                    def _status_badge(status):
-                        icon, fg, bg, border = STATUS_ICON.get(status, ("?", "#5F5E5A", "#f8fafc", "#e2e8f0"))
-                        return (
-                            f'<span style="background:{bg};border:1px solid {border};color:{fg};'
-                            f'font-weight:800;font-size:0.72rem;border-radius:20px;padding:3px 10px;'
-                            f'text-transform:uppercase;letter-spacing:0.05em">{icon} {status.replace("_"," ")}</span>'
-                        )
-
-                    # ── NPI Verification card ─────────────────────────────
-                    npi_v = agent_res.get("npi_verification")
-                    if npi_v:
-                        st.markdown(f'<span style="{SH}">Provider NPI</span>', unsafe_allow_html=True)
-                        st_npi = npi_v.get("status", "error")
-                        _, fg, bg, bdr = STATUS_ICON.get(st_npi, ("?", "#5F5E5A", "#f8fafc", "#e2e8f0"))
-                        rows_html = (
-                            _chip("NPI Queried",  npi_v.get("npi", "—"),             fg)
-                            + _chip("Submitted Name", npi_v.get("submitted_name") or "—", "#0f172a")
-                            + _chip("Registry Name",  npi_v.get("registry_name")  or "—", "#0f172a")
-                            + _chip("Specialty",       npi_v.get("registry_specialty") or "—", "#0f172a")
-                            + _chip("Location",
-                                    f"{npi_v.get('registry_city','')}, {npi_v.get('registry_state','')}" if npi_v.get("registry_state") else "—",
-                                    "#0f172a")
-                            + _chip("Entity Type",     npi_v.get("entity_type") or "—", "#0f172a")
-                        )
-                        st.markdown(
-                            f'<div style="background:white;border:1.5px solid {bdr};border-left:5px solid {fg};'
-                            f'border-radius:14px;padding:18px 22px;margin-bottom:16px">'
-                            f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-                            f'  <div style="font-size:0.9rem;font-weight:800;color:#0f172a">CMS NPI Registry</div>'
-                            f'  {_status_badge(st_npi)}'
-                            f'</div>'
-                            f'{rows_html}'
-                            f'<div style="margin-top:10px;font-size:0.8rem;color:{fg};font-weight:600">{npi_v.get("message","")}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(
-                            '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;'
-                            'padding:14px 18px;color:#64748b;font-size:0.83rem;margin-bottom:16px">'
-                            '⟳ No valid NPI found in this document to verify.</div>',
-                            unsafe_allow_html=True,
-                        )
-
-                    # ── ICD-10 Verification cards ─────────────────────────
-                    icd_list = agent_res.get("icd10_verification", [])
-                    if icd_list:
-                        st.markdown(f'<span style="{SH}">ICD-10 Diagnosis Codes</span>', unsafe_allow_html=True)
-                        for icd in icd_list:
-                            st_icd = icd.get("status", "error")
-                            _, fg, bg, bdr = STATUS_ICON.get(st_icd, ("?", "#5F5E5A", "#f8fafc", "#e2e8f0"))
-                            desc_match = icd.get("description_match")
-                            dm_label   = "✓ Matches" if desc_match is True else ("✗ Differs" if desc_match is False else "—")
-                            dm_color   = "#1D9E75"   if desc_match is True else ("#E24B4A" if desc_match is False else "#64748b")
-                            rows_html = (
-                                _chip("Code",                 icd.get("code", "—"),                       fg)
-                                + _chip("Official Description", icd.get("official_description") or "—",   "#0f172a")
-                                + _chip("Extracted Description",icd.get("extracted_description") or "—", "#0f172a")
-                                + _chip("Description Match",   dm_label,                                  dm_color)
-                            )
-                            st.markdown(
-                                f'<div style="background:white;border:1.5px solid {bdr};border-left:5px solid {fg};'
-                                f'border-radius:14px;padding:18px 22px;margin-bottom:12px">'
-                                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-                                f'  <div style="font-size:0.9rem;font-weight:800;color:#0f172a">NIH ICD-10-CM · {icd.get("code","")}</div>'
-                                f'  {_status_badge(st_icd)}'
-                                f'</div>'
-                                f'{rows_html}'
-                                f'<div style="margin-top:10px;font-size:0.8rem;color:{fg};font-weight:600">{icd.get("message","")}</div>'
-                                f'</div>',
-                                unsafe_allow_html=True,
-                            )
-
-                    # ── Drug Verification card ────────────────────────────
-                    drug_v = agent_res.get("drug_verification")
-                    if drug_v:
-                        st.markdown(f'<span style="{SH}">Drug / Medication</span>', unsafe_allow_html=True)
-                        st_drg = drug_v.get("status", "error")
-                        _, fg, bg, bdr = STATUS_ICON.get(st_drg, ("?", "#5F5E5A", "#f8fafc", "#e2e8f0"))
-                        rows_html = (
-                            _chip("Searched Name",  drug_v.get("searched_name", "—"), fg)
-                            + _chip("FDA Brand Name",  drug_v.get("fda_brand")     or "—", "#0f172a")
-                            + _chip("Generic Name",    drug_v.get("generic_name")  or "—", "#0f172a")
-                            + _chip("Manufacturer",    drug_v.get("manufacturer")  or "—", "#0f172a")
-                            + _chip("Route",           drug_v.get("route")         or "—", "#0f172a")
-                        )
-                        st.markdown(
-                            f'<div style="background:white;border:1.5px solid {bdr};border-left:5px solid {fg};'
-                            f'border-radius:14px;padding:18px 22px;margin-bottom:16px">'
-                            f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-                            f'  <div style="font-size:0.9rem;font-weight:800;color:#0f172a">OpenFDA Drug Database</div>'
-                            f'  {_status_badge(st_drg)}'
-                            f'</div>'
-                            f'{rows_html}'
-                            f'<div style="margin-top:10px;font-size:0.8rem;color:{fg};font-weight:600">{drug_v.get("message","")}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-                    elif not icd_list and not npi_v:
-                        st.markdown(
-                            '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;'
-                            'padding:14px 18px;color:#92400e;font-size:0.83rem">'
-                            '⚠ No verifiable fields (NPI, ICD-10 codes, or drugs) were found in this document.</div>',
-                            unsafe_allow_html=True,
-                        )
-
-            with tab6:
-                # ── Coverage Checker tab ────────────────────────────────────
-                COV_STYLES = {
-                    "required":        ("PA Required",    "#E24B4A", "#fef2f2", "#fca5a5", "✗"),
-                    "likely_required": ("PA Likely",      "#BA7517", "#fffbeb", "#fcd34d", "⚠"),
-                    "check_plan":      ("Verify with Plan","#5F5E5A","#f8fafc", "#e2e8f0", "?"),
-                    "not_required":    ("No PA Needed",   "#1D9E75", "#f0fdf4", "#86efac", "✓"),
-                    "unknown":         ("Unknown",        "#5F5E5A", "#f8fafc", "#e2e8f0", "?"),
-                }
-
-                st.markdown(
-                    '<div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:14px;'
-                    'padding:16px 20px;margin-bottom:16px;display:flex;align-items:flex-start;gap:14px">'
-                    '<div style="font-size:1.6rem;line-height:1">📋</div>'
-                    '<div><div style="font-size:0.95rem;font-weight:800;color:#1e40af;margin-bottom:3px">'
-                    'Coverage Agent — Prior Auth Requirement Check</div>'
-                    '<div style="font-size:0.82rem;color:#1e40af;opacity:0.85">'
-                    'Checks each CPT procedure code against CMS Medicare PA program rules, '
-                    'payer PA lists, and procedure category guidelines.</div></div></div>',
-                    unsafe_allow_html=True,
-                )
-
-                cov_checks = (coverage_res or {}).get("cpt_coverage", [])
-
-                if not cov_checks:
-                    st.markdown(
-                        '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;'
-                        'padding:14px 18px;color:#64748b;font-size:0.83rem">'
-                        '⟳ No CPT codes found in this document to check.</div>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    for cov in cov_checks:
-                        st_cov = cov.get("status", "unknown")
-                        label, fg, bg, bdr, ic = COV_STYLES.get(st_cov, COV_STYLES["unknown"])
-
-                        def _cov_row(lbl, val, color="#0f172a"):
-                            return (
-                                f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                                f'padding:6px 0;border-bottom:1px solid #f1f5f9">'
-                                f'<span style="font-size:0.78rem;color:#64748b;font-weight:600">{lbl}</span>'
-                                f'<span style="font-size:0.82rem;font-weight:700;color:{color};max-width:65%;text-align:right">{val}</span>'
-                                f'</div>'
-                            )
-
-                        rows_html = (
-                            _cov_row("CPT Code",      cov.get("cpt_code", "—"),      fg)
-                            + _cov_row("Procedure",   cov.get("procedure", "—"),      "#0f172a")
-                            + _cov_row("Payor",       cov.get("payor", "—"),          "#0f172a")
-                            + _cov_row("Policy Source", cov.get("policy_source", "—"), "#475569")
-                        )
-
-                        rec = cov.get("recommendation")
-                        rec_html = (
-                            f'<div style="margin-top:10px;background:#f8fafc;border-radius:8px;'
-                            f'padding:10px 14px;font-size:0.78rem;color:#475569;line-height:1.5">'
-                            f'💡 {rec}</div>'
-                            if rec else ""
-                        )
-
-                        status_chip = (
-                            f'<span style="background:{bg};border:1px solid {bdr};color:{fg};'
-                            f'font-weight:800;font-size:0.72rem;border-radius:20px;padding:3px 10px;'
-                            f'text-transform:uppercase;letter-spacing:0.05em">{ic} {label}</span>'
-                        )
-
-                        st.markdown(
-                            f'<div style="background:white;border:1.5px solid {bdr};border-left:5px solid {fg};'
-                            f'border-radius:14px;padding:18px 22px;margin-bottom:14px">'
-                            f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-                            f'  <div style="font-size:0.9rem;font-weight:800;color:#0f172a">CPT {cov.get("cpt_code","")}</div>'
-                            f'  {status_chip}'
-                            f'</div>'
-                            f'{rows_html}'
-                            f'<div style="margin-top:10px;font-size:0.8rem;color:{fg};font-weight:600">{cov.get("message","")}</div>'
-                            f'{rec_html}'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-
-            with tab7:
-                # ── Risk Score tab ──────────────────────────────────────────
-                # Re-compute if session entry doesn't have it yet (e.g. loaded from DB)
-                if risk_res is None:
-                    try:
-                        risk_res = _risk.score(result, agent_res, coverage_res, issues)
-                        entry["risk_res"] = risk_res
-                    except Exception as e:
-                        st.error(f"Risk scoring failed: {e}")
-
-                if risk_res:
-                    score  = risk_res["score"]
-                    level  = risk_res["level"]
-                    color  = risk_res["color"]
-                    bg     = risk_res["bg"]
-                    border = risk_res["border"]
-                    icon   = risk_res["icon"]
-                    factors = risk_res["factors"]
-                    rec    = risk_res["recommendation"]
-
-                    # ── Plain-English score explanation + signal breakdown ─────
-                    st.markdown(risk_explained(risk_res), unsafe_allow_html=True)
-
-                    # ── Actionable fixes: diagnosis → prescription ─────────────
-                    st.markdown(
-                        fix_recommendations(result, risk_res, agent_res, issues),
-                        unsafe_allow_html=True,
-                    )
-
-                    # ── Gauge card ──────────────────────────────────────────
-                    # SVG arc gauge — semi-circle from left to right
-                    # Score 0=left, 100=right, fill proportional
-                    # Colours: 0-49 red, 50-74 amber, 75-100 green
-                    _arc_color = "#1D9E75" if score >= 75 else ("#BA7517" if score >= 50 else "#E24B4A")
-                    # SVG arc: radius 70, center 90,85, sweep from 180° to (180 - score*1.8)°
-                    import math
-                    r_val   = 70
-                    cx, cy  = 90, 85
-                    start_angle = math.radians(180)
-                    end_angle   = math.radians(180 - score * 1.8)
-                    sx = cx + r_val * math.cos(start_angle)
-                    sy = cy + r_val * math.sin(start_angle)
-                    ex = cx + r_val * math.cos(end_angle)
-                    ey = cy + r_val * math.sin(end_angle)
-                    large_arc = 1 if score > 50 else 0
-
-                    gauge_svg = (
-                        f'<svg viewBox="0 0 180 100" xmlns="http://www.w3.org/2000/svg" style="width:200px;height:112px">'
-                        # Track arc (grey)
-                        f'<path d="M {20} {85} A 70 70 0 0 1 {160} {85}" fill="none" stroke="#e2e8f0" stroke-width="12" stroke-linecap="round"/>'
-                        # Value arc
-                        f'<path d="M {sx:.1f} {sy:.1f} A {r_val} {r_val} 0 {large_arc} 1 {ex:.1f} {ey:.1f}" fill="none" stroke="{_arc_color}" stroke-width="12" stroke-linecap="round"/>'
-                        # Score text
-                        f'<text x="90" y="76" text-anchor="middle" font-size="28" font-weight="900" fill="{_arc_color}" font-family="Inter,sans-serif">{score}</text>'
-                        f'<text x="90" y="94" text-anchor="middle" font-size="9" fill="#64748b" font-family="Inter,sans-serif">out of 100</text>'
-                        f'</svg>'
-                    )
-
-                    st.markdown(
-                        f'<div style="background:white;border:1.5px solid {border};border-radius:20px;'
-                        f'padding:28px 32px;margin-bottom:20px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;'
-                        f'box-shadow:0 4px 20px rgba(0,0,0,0.06)">'
-
-                        # Gauge SVG
-                        f'<div style="flex-shrink:0">{gauge_svg}</div>'
-
-                        # Level + recommendation
-                        f'<div style="flex:1;min-width:220px">'
-                        f'  <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;margin-bottom:6px">Approval Risk Assessment</div>'
-                        f'  <div style="font-size:1.4rem;font-weight:900;color:{color};margin-bottom:10px">{icon} {level}</div>'
-                        f'  <div style="font-size:0.85rem;color:#334155;line-height:1.6;background:{bg};'
-                        f'  border-left:3px solid {color};border-radius:0 8px 8px 0;padding:10px 14px">'
-                        f'  {rec}</div>'
-                        f'</div>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                    # ── Per-factor breakdown ────────────────────────────────
-                    st.markdown(
-                        f'<div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;'
-                        f'letter-spacing:0.12em;color:#1D9E75;margin:4px 0 14px">Score Breakdown</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                    for factor in factors:
-                        f_pts   = factor["points"]
-                        f_max   = factor["max"]
-                        f_pct   = int(f_pts / f_max * 100)
-                        f_color = "#1D9E75" if factor["positive"] else ("#BA7517" if f_pct >= 40 else "#E24B4A")
-                        f_icon  = "✓" if factor["positive"] else ("⚠" if f_pct >= 40 else "✗")
-                        f_bg    = "#f0fdf4" if factor["positive"] else ("#fffbeb" if f_pct >= 40 else "#fef2f2")
-
-                        st.markdown(
-                            f'<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;'
-                            f'padding:14px 18px;margin-bottom:10px">'
-
-                            # Header row
-                            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-                            f'  <div style="font-size:0.85rem;font-weight:700;color:#0f172a">{factor["label"]}</div>'
-                            f'  <div style="display:flex;align-items:center;gap:10px">'
-                            f'    <span style="font-size:0.78rem;font-weight:800;color:{f_color}">{f_pts}/{f_max} pts</span>'
-                            f'    <span style="background:{f_bg};color:{f_color};border:1px solid {f_color}33;'
-                            f'    border-radius:20px;padding:2px 9px;font-size:0.7rem;font-weight:700">{f_icon}</span>'
-                            f'  </div>'
-                            f'</div>'
-
-                            # Progress bar
-                            f'<div style="background:#f1f5f9;border-radius:6px;height:6px;margin-bottom:8px">'
-                            f'  <div style="width:{f_pct}%;height:6px;border-radius:6px;background:{f_color};transition:width 0.6s ease"></div>'
-                            f'</div>'
-
-                            # Detail
-                            f'<div style="font-size:0.78rem;color:#64748b">{factor["detail"]}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-
-                else:
-                    st.markdown(
-                        '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;'
-                        'padding:20px;color:#64748b;font-size:0.85rem;text-align:center">'
-                        '🎯 Risk score will appear here after parsing a document.</div>',
-                        unsafe_allow_html=True,
-                    )
-
-# ── How it works ───────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="divider-wrap">
-  <div class="divider-line"></div>
-  <div class="divider-label">How it works</div>
-  <div class="divider-line"></div>
-</div>
-""", unsafe_allow_html=True)
-
-c1, c2, c3 = st.columns(3)
-steps = [
-    ("1", "Upload your document", "Drop any prior auth PDF or text file. Batch upload multiple documents at once for high-volume processing."),
-    ("2", "AI extracts & validates", "NovaClaim AI extracts all 17 structured fields, validates ICD-10 codes, verifies NPI numbers, and assigns confidence scores."),
-    ("3", "Review, export, or appeal", "Download structured JSON, export to Excel, view analytics, or generate clinically-grounded appeal letters for denials."),
-]
-for col, (num, title, desc) in zip([c1, c2, c3], steps):
-    with col:
-        st.markdown(f"""
-        <div class="step-card">
-          <div class="step-num-wrap">{num}</div>
-          <div class="step-title">{title}</div>
-          <div class="step-desc">{desc}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-# ── Before / After comparison ──────────────────────────────────────────────────
-st.markdown("""
-<div class="divider-wrap" style="margin-top:36px">
-  <div class="divider-line"></div>
-  <div class="divider-label">Manual vs AI</div>
-  <div class="divider-line"></div>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-<div style="min-width:480px;border-radius:24px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.10);margin-bottom:8px">
-
-  <!-- Dark gradient header -->
-  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;
-              background:linear-gradient(135deg,#0f172a 0%,#1e293b 60%,#0f2a1f 100%)">
-    <div style="padding:20px 28px">
-      <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.14em;color:#64748b;margin-bottom:4px">Task</div>
-    </div>
-    <div style="padding:20px 28px;border-left:1px solid rgba(255,255,255,0.07)">
-      <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.14em;color:#fca5a5;margin-bottom:4px">✕ Manual Process</div>
-      <div style="font-size:0.78rem;color:#94a3b8;font-weight:500">Hours of work per document</div>
-    </div>
-    <div style="padding:20px 28px;border-left:1px solid rgba(255,255,255,0.07);
-                background:rgba(29,158,117,0.15)">
-      <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.14em;color:#6ee7b7;margin-bottom:4px">✓ NovaClaim AI</div>
-      <div style="font-size:0.78rem;color:#6ee7b7;font-weight:600;opacity:0.8">Seconds. Automatically.</div>
-    </div>
-  </div>
-
-  <!-- Row 1 -->
-  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:white;border-bottom:1px solid #f1f5f9">
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.2rem">📋</span>
-      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Extract 17 fields</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
-      <span style="font-size:0.85rem;color:#94a3b8">30–45 min per document</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
-      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ Under 8 sec</span>
-    </div>
-  </div>
-
-  <!-- Row 2 -->
-  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:#fafbfc;border-bottom:1px solid #f1f5f9">
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.2rem">🏥</span>
-      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Verify NPI number</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
-      <span style="font-size:0.85rem;color:#94a3b8">Manual CMS lookup</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
-      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ Auto via CMS API</span>
-    </div>
-  </div>
-
-  <!-- Row 3 -->
-  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:white;border-bottom:1px solid #f1f5f9">
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.2rem">🧬</span>
-      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Validate ICD-10 codes</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
-      <span style="font-size:0.85rem;color:#94a3b8">Manual NIH codebook</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
-      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ Auto via NIH API</span>
-    </div>
-  </div>
-
-  <!-- Row 4 -->
-  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:#fafbfc;border-bottom:1px solid #f1f5f9">
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.2rem">📞</span>
-      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Check PA requirement</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
-      <span style="font-size:0.85rem;color:#94a3b8">Call payer, check portal</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
-      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ Instant CPT check</span>
-    </div>
-  </div>
-
-  <!-- Row 5 -->
-  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:white;border-bottom:1px solid #f1f5f9">
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.2rem">⚖️</span>
-      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Write appeal letter</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
-      <span style="font-size:0.85rem;color:#94a3b8">2–4 hrs, attorney needed</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
-      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ 30 sec, AI-drafted</span>
-    </div>
-  </div>
-
-  <!-- Row 6 -->
-  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;background:#fafbfc;border-bottom:1px solid #f1f5f9">
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.2rem">🎯</span>
-      <span style="font-size:0.88rem;font-weight:700;color:#0f172a">Predict approval risk</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;border-left:1px solid #f1f5f9">
-      <span style="font-size:0.85rem;color:#94a3b8">Experience-based guesswork</span>
-    </div>
-    <div style="padding:16px 28px;display:flex;align-items:center;gap:8px;border-left:1px solid #f1f5f9;background:rgba(29,158,117,0.04)">
-      <span style="background:#dcfce7;color:#166534;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap">⚡ 0–100 AI risk score</span>
-    </div>
-  </div>
-
-  <!-- Footer summary bar -->
-  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;
-              background:linear-gradient(135deg,#0f172a,#1e293b)">
-    <div style="padding:16px 28px;font-size:0.8rem;font-weight:700;color:#94a3b8">Total time per document</div>
-    <div style="padding:16px 28px;font-size:0.9rem;font-weight:900;color:#fca5a5;border-left:1px solid rgba(255,255,255,0.07)">3–6 hours</div>
-    <div style="padding:16px 28px;font-size:0.9rem;font-weight:900;color:#6ee7b7;border-left:1px solid rgba(255,255,255,0.07);background:rgba(29,158,117,0.15)">Under 60 seconds</div>
-  </div>
-
-</div>
-</div>
-<p style="text-align:center;font-size:0.78rem;color:#94a3b8;margin-top:12px">
-  NovaClaim AI handles every step that previously required manual work — in seconds, not hours.
-</p>
-""", unsafe_allow_html=True)
-
-# ── About ──────────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="divider-wrap">
-  <div class="divider-line"></div>
-  <div class="divider-label">About the builder</div>
-  <div class="divider-line"></div>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="about-wrap">
-  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
-    <div class="about-avatar">A</div>
-    <div>
-      <div class="about-name">Aakash Mehta</div>
-      <div class="about-role">AI Implementation Analyst</div>
-    </div>
-  </div>
-  <div class="about-body">
-    Built NovaClaim AI end to end — document extraction, real-time validation against live
-    government and FDA databases, agentic appeal generation, an ML denial predictor, and a
-    SQL-backed analytics layer. It takes a task that consumes
-    <strong style="color:white">13 hours of a physician's week</strong> and reduces it to
-    seconds per document.
-  </div>
-  <a class="about-link" href="https://www.linkedin.com/in/aakash-mehta28/" target="_blank">💼 LinkedIn</a>
-  <a class="about-link" href="mailto:aakashmehta893@gmail.com">✉️ aakashmehta893@gmail.com</a>
-  <div class="about-stat-row">
-    <div><div class="about-stat-num">4</div><div class="about-stat-label">AI agents</div></div>
-    <div><div class="about-stat-num">12</div><div class="about-stat-label">labeled test documents</div></div>
-    <div><div class="about-stat-num">3</div><div class="about-stat-label">live external APIs</div></div>
-    <div><div class="about-stat-num">17 fields</div><div class="about-stat-label">extracted per doc</div></div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Demo request form ──────────────────────────────────────────────────────────
-st.markdown("""
-<div class="divider-wrap">
-  <div class="divider-line"></div>
-  <div class="divider-label">Request a demo</div>
-  <div class="divider-line"></div>
-</div>
-""", unsafe_allow_html=True)
-
-# Two-column layout: left = pitch, right = form
-pitch_col, form_col = st.columns([1, 1.6], gap="large")
-
-with pitch_col:
-    st.markdown("""
-    <div style="background:linear-gradient(135deg,#0f2a1f,#0f172a);border:1px solid rgba(29,158,117,0.25);
-                border-radius:20px;padding:32px;height:100%">
-      <div style="font-size:1.4rem;font-weight:900;color:white;margin-bottom:10px;line-height:1.3">
-        Interested in NovaClaim AI?
-      </div>
-      <div style="font-size:0.85rem;color:#94a3b8;line-height:1.7;margin-bottom:24px">
-        Whether you're a health system processing 50 PA forms a month or a health-tech company
-        building prior auth workflows — let's talk about how NovaClaim AI can help.
-      </div>
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div style="display:flex;align-items:center;gap:12px">
-          <div style="background:rgba(29,158,117,0.15);border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">⚡</div>
-          <div style="font-size:0.82rem;color:#94a3b8"><strong style="color:#e2e8f0">45 min → 8 sec</strong><br>Per document processing time</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <div style="background:rgba(79,70,229,0.15);border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">🧠</div>
-          <div style="font-size:0.82rem;color:#94a3b8"><strong style="color:#e2e8f0">AI-generated appeal letters</strong><br>For denied prior authorizations</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <div style="background:rgba(186,117,23,0.15);border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">📊</div>
-          <div style="font-size:0.82rem;color:#94a3b8"><strong style="color:#e2e8f0">Real-time analytics</strong><br>Payor trends, denial patterns, field coverage</div>
-        </div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with form_col:
-    st.markdown("""
-    <div style="background:white;border:1px solid #e2e8f0;border-radius:20px;padding:32px;
-                box-shadow:0 4px 24px rgba(0,0,0,0.06)">
-    """, unsafe_allow_html=True)
-
-    with st.form("demo_form", clear_on_submit=True):
-        st.markdown('<div style="font-size:1.1rem;font-weight:800;color:#0f172a;margin-bottom:20px">Send a message</div>', unsafe_allow_html=True)
-        c1f, c2f = st.columns(2)
-        with c1f:
-            demo_name  = st.text_input("Full Name *",   placeholder="Jane Smith")
-            demo_email = st.text_input("Work Email *",  placeholder="jane@hospital.org")
-            demo_org   = st.text_input("Organization",  placeholder="Northwestern Memorial")
-        with c2f:
-            demo_vol   = st.selectbox("Monthly PA Volume", ["< 100 forms","100–500 forms","500–2,000 forms","2,000+ forms"])
-            demo_role  = st.selectbox("Your Role", ["Physician / Provider","Healthcare Administrator","Health Tech / Engineering","Insurance / Payor","Researcher / Student","Other"])
-            demo_src   = st.text_input("How did you find us?", placeholder="LinkedIn, GitHub, colleague…")
-        demo_msg = st.text_area("Tell me about your use case *", placeholder="E.g., we process 400 prior auths per month manually and want to automate extraction and validation…", height=110)
-        submitted = st.form_submit_button("Send Message →", type="primary", use_container_width=True)
-
-
-if submitted:
-    if not (demo_name and demo_email and demo_msg):
-        st.markdown(
-            '<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-            'padding:12px 16px;color:#991b1b;font-weight:600;font-size:0.85rem;margin-top:8px">'
-            '✕ Please fill in your name, email address, and use case.</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        with st.spinner("Sending your message…"):
-            ok, status = _send_demo_email(
-                demo_name, demo_email, demo_org, demo_vol, demo_role, demo_src, demo_msg
-            )
-
-        if ok:
-            st.markdown(
-                f'<div style="background:#f0fdf4;border:1.5px solid #86efac;border-left:4px solid #1D9E75;'
-                f'border-radius:12px;padding:16px 20px;color:#166534;font-weight:600;font-size:0.9rem;margin-top:8px">'
-                f'✓ Got it, <strong>{demo_name}</strong>! Your message has been received. I\'ll review it and get back to you at <strong>{demo_email}</strong> within 24 hours.</div>',
-                unsafe_allow_html=True,
-            )
-        elif status == "not_configured":
-            # Email not set up yet — show a friendly mailto fallback
-            st.markdown(
-                f'<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-left:4px solid #BA7517;'
-                f'border-radius:12px;padding:16px 20px;color:#92400e;font-size:0.87rem;margin-top:8px">'
-                f'<div style="font-weight:700;margin-bottom:4px">✓ Message received!</div>'
-                f'Email delivery isn\'t configured yet — please reach out directly at '
-                f'<a href="mailto:aakashmehta893@gmail.com?subject=NovaClaim AI Demo Request — {demo_name}'
-                f'&body=Name: {demo_name}%0AEmail: {demo_email}%0A%0A{demo_msg}" '
-                f'style="color:#92400e;font-weight:700">aakashmehta893@gmail.com</a>.</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                f'padding:12px 16px;color:#991b1b;font-size:0.83rem;margin-top:8px">'
-                f'✕ Could not send email: {status}. '
-                f'Please email directly at <a href="mailto:aakashmehta893@gmail.com" style="color:#991b1b">aakashmehta893@gmail.com</a>.</div>',
-                unsafe_allow_html=True,
-            )
-
-# ── Footer ─────────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="footer">
-  NovaClaim AI &nbsp;·&nbsp; Built by Aakash Mehta &nbsp;·&nbsp;
-  <a href="https://www.linkedin.com/in/aakash-mehta28/" target="_blank">LinkedIn</a> &nbsp;·&nbsp;
-  <a href="mailto:aakashmehta893@gmail.com">aakashmehta893@gmail.com</a>
-</div>
-""", unsafe_allow_html=True)
+                    st.info(f"Email sending isn't available right now. Please write to {F.EMAIL} directly.")
+
+H(f"""
+<div class="nc-footer">NovaClaim AI · synthetic data only · not a medical or billing tool<br>
+Industry figures: <a href="{F.AMA_URL}" target="_blank" rel="noopener">{F.AMA_SOURCE}</a> ·
+<a href="{F.GITHUB_URL}" target="_blank" rel="noopener">Source code</a></div>
+""")
+
+inject_motion()

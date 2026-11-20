@@ -18,7 +18,7 @@ Phone: (614) 555-0561
 REQUESTING PROVIDER
 -------------------
 Provider Name: Dr. Marcus D. Greene, MD
-NPI: 2345678901
+NPI: 1543210987
 Specialty: Psychiatry
 Facility: OhioHealth Riverside Methodist Hospital
 Facility Address: 3535 Olentangy River Rd, Columbus, OH 43214
@@ -33,7 +33,7 @@ ICD-10 Code: F33.2
 
 TREATMENT REQUESTED
 -------------------
-Service/Procedure: Transcranial Magnetic Stimulation (TMS) therapy — 36 sessions
+Service/Procedure: Transcranial Magnetic Stimulation (TMS) therapy, 36 sessions
 CPT Code: 90867
 Requested Start Date: 2024-09-15
 Place of Service: Outpatient psychiatric clinic

@@ -10,23 +10,31 @@ init_db()
 from demo_data import seed_sample_outputs
 seed_sample_outputs()
 
-st.set_page_config(page_title="History", page_icon="📁", layout="wide")
+st.set_page_config(page_title="History · NovaClaim AI", page_icon="📁", layout="wide",
+                   initial_sidebar_state="collapsed")
+st.markdown("<style>[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl']{display:none}"
+            ".stApp{background:#FBFAF7}</style>", unsafe_allow_html=True)
+try:
+    st.page_link("Home.py", label="Back to NovaClaim", icon="⬅️")
+except Exception:
+    st.markdown("[⬅️ Back to NovaClaim](/)")
 
 st.title("📁 History & Export")
-st.markdown("All previously parsed prior authorization documents, searchable and exportable.")
+st.markdown("Synthetic sample documents from the evaluation run (and the labeled demo set, if loaded), "
+            "searchable and exportable. Visitor uploads are kept in their own session and never stored here.")
 st.divider()
 
 records = get_all_records()
 
 if not records:
-    st.info("No records yet. Go to the Parser page and upload some documents first.")
+    st.info("No records yet. Run `python evaluate.py` to create the sample records.")
     st.stop()
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
 def parse_json_field(val):
     if not val or val == "null":
-        return "—"
+        return "n/a"
     try:
         parsed = json.loads(val)
         if isinstance(parsed, list):
@@ -96,7 +104,7 @@ if sort_by == "Oldest first":
 elif sort_by == "Status":
     filtered = filtered.sort_values("Status")
 
-st.dataframe(filtered, use_container_width=True, hide_index=True)
+st.dataframe(filtered, width="stretch", hide_index=True)
 st.caption(f"Showing {len(filtered)} of {len(records)} records")
 
 # ── Export ─────────────────────────────────────────────────────────────────────
@@ -114,7 +122,7 @@ with col1:
         data=csv_data,
         file_name="prior_auth_records.csv",
         mime="text/csv",
-        use_container_width=True,
+        width="stretch",
     )
 
 with col2:
@@ -127,7 +135,7 @@ with col2:
             data=buffer.getvalue(),
             file_name="prior_auth_records.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
+            width="stretch",
         )
     except ImportError:
         st.warning("Install openpyxl for Excel export: `pip3 install openpyxl`")

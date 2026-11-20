@@ -18,3 +18,8 @@ build/
 
 # Old entry point (replaced by Home.py)
 app.py
+
+# Local scratch files
+prior_auth_backup.db
+portfolio_changes.docx
+NovaClaim_design_preview.html

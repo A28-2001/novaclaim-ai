@@ -18,7 +18,7 @@ Phone: (312) 555-0192
 REQUESTING PROVIDER
 -------------------
 Provider Name: Dr. James R. Hartwell, MD
-NPI: 1234567890
+NPI: 1765432194
 Specialty: Oncology
 Facility: Northwestern Memorial Hospital
 Facility Address: 251 E Huron St, Chicago, IL 60611
@@ -37,7 +37,7 @@ ICD-10 Code: I97.2
 
 TREATMENT REQUESTED
 -------------------
-Service/Procedure: Pertuzumab (Perjeta) 420mg IV infusion — 6 cycles
+Service/Procedure: Pertuzumab (Perjeta) 420mg IV infusion, 6 cycles
 CPT Code: 96413
 Requested Start Date: 2024-11-20
 Place of Service: Outpatient infusion center

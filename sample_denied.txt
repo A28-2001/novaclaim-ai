@@ -18,7 +18,7 @@ Phone: (773) 555-0347
 REQUESTING PROVIDER
 -------------------
 Provider Name: Dr. Sandra L. Cho, MD
-NPI: 9876543210
+NPI: 1987654328
 Specialty: Orthopedic Surgery
 Facility: Rush University Medical Center
 Facility Address: 1620 W Harrison St, Chicago, IL 60612
@@ -55,7 +55,7 @@ Decision Date: 2024-10-22
 Denial Reason: Requested procedure does not meet medical necessity criteria.
 Medical records do not sufficiently document failure of all required
 conservative treatment modalities. Specifically, documentation of physical
-therapy is incomplete — only 12 of the required 20 sessions were documented
+therapy is incomplete: only 12 of the required 20 sessions were documented
 in submitted records. Additionally, hyaluronic acid (viscosupplementation)
 injections were not attempted prior to surgical request, as required per
 plan guidelines (Policy MED-0042).

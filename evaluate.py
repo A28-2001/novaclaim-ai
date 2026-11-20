@@ -5,7 +5,7 @@ Field-level extraction accuracy for NovaClaim AI on the labeled synthetic test s
 
     python evaluate.py               # run the eval, write eval/ outputs, update README.md
     python evaluate.py --no-readme   # run without touching README.md
-    python evaluate.py --no-agents   # skip the 4 verification agents (extraction only)
+    python evaluate.py --no-agents   # skip the checks (extraction timing only)
     python evaluate.py --self-test   # score the labels against themselves, no API calls
 
 What it measures
@@ -435,30 +435,14 @@ def _parse_patiently(parse_fn, text: str, max_attempts: int = 6):
 
 
 def _run_agents(result: dict):
-    """Run the same verification agents the app runs. Failures are recorded, not raised."""
-    out = {"agent_res": None, "coverage_res": None, "risk_res": None, "errors": []}
+    """Run the same checks the app runs (pipeline.run_checks). Failures are recorded, not raised."""
+    from pipeline import run_checks
     try:
-        from validator import validate_fields
-        issues = validate_fields(result)
+        c = run_checks(result)
+        return {"agent_res": c["agent_res"], "coverage_res": c["coverage_res"],
+                "readiness": c["readiness"], "errors": [f"{k}: {v}" for k, v in c["errors"].items()]}
     except Exception as e:
-        issues = []
-        out["errors"].append(f"validator: {e}")
-    try:
-        from validation_agent import ValidationAgent
-        out["agent_res"] = ValidationAgent().validate_all(result)
-    except Exception as e:
-        out["errors"].append(f"validation_agent: {e}")
-    try:
-        from coverage_agent import CoverageAgent
-        out["coverage_res"] = CoverageAgent().check_all(result)
-    except Exception as e:
-        out["errors"].append(f"coverage_agent: {e}")
-    try:
-        from risk_scorer import RiskScorer
-        out["risk_res"] = RiskScorer().score(result, out["agent_res"], out["coverage_res"], issues)
-    except Exception as e:
-        out["errors"].append(f"risk_scorer: {e}")
-    return out
+        return {"agent_res": None, "coverage_res": None, "readiness": None, "errors": [f"pipeline: {e}"]}
 
 
 def run_pipeline(gt: dict, with_agents: bool = True, pause_s: float = 2.0):
@@ -499,7 +483,7 @@ def run_pipeline(gt: dict, with_agents: bool = True, pause_s: float = 2.0):
             })
             msg = f"parsed in {parse_s:.1f}s" + (f", end-to-end {e2e:.1f}s" if with_agents else "")
             if agent_bits.get("errors"):
-                msg += f" (agent issues: {len(agent_bits['errors'])})"
+                msg += f" (agent errors: {'; '.join(agent_bits['errors'])[:120]})"
             print(f"      ✓ {msg}")
         else:
             print(f"      ✗ {err}")
@@ -550,7 +534,7 @@ def render_readme_block(m: dict, meta: dict) -> str:
         lines.append(f"| Median extraction time (one LLM call) | {m['median_parse_s']:.1f} s "
                      f"(max {m['max_parse_s']:.1f} s) |")
     if m.get("median_end_to_end_s") is not None:
-        lines.append(f"| Median end-to-end time (extraction + 4 agents) | "
+        lines.append(f"| Median end-to-end time (extraction + validation, coverage and readiness checks) | "
                      f"{m['median_end_to_end_s']:.1f} s (max {m['max_end_to_end_s']:.1f} s) |")
     for form, v in sorted(m["by_form"].items()):
         lines.append(f"| Field accuracy, {form}-form documents | {_pct(v['accuracy'])} |")
@@ -689,7 +673,7 @@ def main(argv=None):
     print("ok.\n")
 
     print(f"Evaluating {len(gt['documents'])} documents"
-          f"{'' if args.no_agents else ' (extraction + 4 agents)'}…\n")
+          f"{'' if args.no_agents else ' (extraction + validation, coverage and readiness checks)'}…\n")
     predictions, outputs = run_pipeline(gt, with_agents=not args.no_agents)
     m = evaluate_predictions(gt, predictions)
     meta = {
@@ -726,7 +710,33 @@ def main(argv=None):
     print(f"\n  Wrote {os.path.relpath(RESULTS_PATH, ROOT)} and {os.path.relpath(OUTPUTS_PATH, ROOT)}")
     if not args.no_readme and update_readme(render_readme_block(m, meta)):
         print("  Updated the Evaluation section of README.md")
+    if not args.no_agents:
+        _save_appeal_demo(outputs, meta)
     return 0
+
+
+APPEAL_DEMO_FILE = "sample_denied.txt"
+APPEAL_DEMO_PATH = os.path.join(EVAL_DIR, "appeal_demo.json")
+
+
+def _save_appeal_demo(outputs: list, meta: dict) -> None:
+    """
+    Draft one appeal letter for the story page, so visitors see a real draft
+    without waiting for a live LLM call. Not part of the accuracy metrics.
+    """
+    doc = next((d for d in outputs if d["file"] == APPEAL_DEMO_FILE), None)
+    if not doc:
+        return
+    try:
+        from appeal_agent import AppealAgent
+        text = _read_document(os.path.join(ROOT, APPEAL_DEMO_FILE))
+        draft = AppealAgent().generate(doc["result"], doc.get("agent_res"), None, text)
+        with open(APPEAL_DEMO_PATH, "w", encoding="utf-8") as fh:
+            json.dump({"meta": meta, "file": APPEAL_DEMO_FILE, **draft}, fh, indent=2, default=str)
+        print(f"  Saved a sample appeal draft to {os.path.relpath(APPEAL_DEMO_PATH, ROOT)} "
+              f"({draft['metadata']['placeholders']} gaps marked for the clinician)")
+    except Exception as e:
+        print(f"  (Skipped the sample appeal draft: {type(e).__name__}: {e})")
 
 
 if __name__ == "__main__":

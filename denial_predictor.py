@@ -8,18 +8,18 @@ Two models are trained and ensembled:
   - RandomForestClassifier : captures non-linear feature interactions
 
 Features (all derivable from a parsed document, no external APIs needed):
-  completeness_score    — fraction of required fields present (0.0–1.0)
-  has_npi               — provider NPI present (0/1)
-  has_cpt               — CPT procedure code present (0/1)
-  has_diagnosis         — ICD-10 diagnosis code present (0/1)
-  has_auth_number       — authorization number present (0/1)
-  has_member_id         — insurance member ID present (0/1)
-  has_facility          — facility name present (0/1)
-  validation_errors     — count of hard validation errors
-  validation_warnings   — count of validation warnings
-  payor_approval_rate   — historical approval rate for this payor (0.0–1.0)
+  completeness_score    fraction of required fields present (0.0–1.0)
+  has_npi               provider NPI present (0/1)
+  has_cpt               CPT procedure code present (0/1)
+  has_diagnosis         ICD-10 diagnosis code present (0/1)
+  has_auth_number       authorization number present (0/1)
+  has_member_id         insurance member ID present (0/1)
+  has_facility          facility name present (0/1)
+  validation_errors     count of hard validation errors
+  validation_warnings   count of validation warnings
+  payor_approval_rate   historical approval rate for this payor (0.0–1.0)
 
-Target: binary — 1 = Denied, 0 = Approved
+Target: binary (1 = Denied, 0 = Approved)
 (Pending records are excluded from training; predicted at inference time)
 
 Usage in Home.py:
@@ -53,7 +53,7 @@ except ImportError:
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "prior_auth.db")
 
-# Fields used to compute completeness — mirrors risk_scorer.py
+# Fields used to compute completeness: mirrors risk_scorer.py
 REQUIRED_FIELDS = [
     "patient_name", "date_of_birth", "member_id", "provider_name",
     "provider_npi", "facility_name", "diagnosis_code", "treatment_requested",
@@ -193,7 +193,7 @@ class DenialPredictor:
     def _train(self, X, y) -> bool:
         """Fit both models, run cross-validation, store evaluation metrics."""
         if len(np.unique(y)) < 2:
-            return False  # only one class — can't train
+            return False  # only one class: can't train
 
         self._lr = Pipeline([
             ("scaler", StandardScaler()),
@@ -281,7 +281,7 @@ class DenialPredictor:
         )
 
     def logistic_coefficients(self) -> list[tuple]:
-        """Return [(feature_name, coefficient), ...] from LR — shows direction of effect."""
+        """Return [(feature_name, coefficient), ...] from LR: shows direction of effect."""
         if not self.is_fitted or self._lr is None:
             return []
         coefs = self._lr.named_steps["clf"].coef_[0]
@@ -306,7 +306,7 @@ class DenialPredictor:
             return "Critical Risk", "#7f1d1d"
 
     def summary(self) -> str:
-        status = "Trained" if self.is_fitted else "Not trained (insufficient data — using rule-based fallback)"
+        status = "Trained" if self.is_fitted else "Not trained (insufficient data, using rule-based fallback)"
         lines = [
             f"DenialPredictor status : {status}",
             f"Training samples       : {self.n_training_samples}",

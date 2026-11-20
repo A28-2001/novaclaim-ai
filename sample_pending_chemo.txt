@@ -18,7 +18,7 @@ Phone: (404) 555-0733
 REQUESTING PROVIDER
 -------------------
 Provider Name: Dr. Rachel S. Patel, MD
-NPI: 7890123456
+NPI: 1432109878
 Specialty: Thoracic Oncology
 Facility: Emory University Hospital
 Facility Address: 1364 Clifton Rd NE, Atlanta, GA 30322
@@ -36,7 +36,7 @@ ICD-10 Code: C77.1
 
 TREATMENT REQUESTED
 -------------------
-Service/Procedure: Pembrolizumab (Keytruda) 200mg IV every 3 weeks — 4 cycles
+Service/Procedure: Pembrolizumab (Keytruda) 200mg IV every 3 weeks, 4 cycles
 CPT Code: 96413
 Requested Start Date: 2024-12-01
 Place of Service: Outpatient infusion center

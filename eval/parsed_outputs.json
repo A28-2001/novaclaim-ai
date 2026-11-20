@@ -1,10 +1,10 @@
 {
   "meta": {
-    "run_at": "2026-10-05T11:31:34",
-    "run_date": "2026-10-05",
+    "run_at": "2026-11-20T13:20:30",
+    "run_date": "2026-11-20",
     "model": "openai/gpt-oss-20b",
     "with_agents": true,
-    "git_commit": "940289d",
+    "git_commit": "a8456d3",
     "python": "3.11.7"
   },
   "documents": [
@@ -15,7 +15,7 @@
         "date_of_birth": "1978-04-15",
         "member_id": "BCB-774920183",
         "provider_name": "Dr. James R. Hartwell, MD",
-        "provider_npi": "1234567890",
+        "provider_npi": "1765432194",
         "facility_name": "Northwestern Memorial Hospital",
         "diagnosis_code": [
           "C50.411",
@@ -25,7 +25,7 @@
           "Breast cancer, right upper-outer quadrant",
           "Lymphedema following mastectomy"
         ],
-        "treatment_requested": "Pertuzumab (Perjeta) 420mg IV infusion \u2014 6 cycles",
+        "treatment_requested": "Pertuzumab (Perjeta) 420mg IV infusion, 6 cycles",
         "cpt_code": [
           "96413"
         ],
@@ -36,6 +36,11 @@
         "denial_reason": null,
         "authorization_number": "AUTH-2024-00448821",
         "notes": "Prior authorization approved for 6 cycles of Pertuzumab 420mg IV per NCCN guidelines for HER2+ breast cancer. Re-authorization required after cycle 6.",
+        "drug_name": "pertuzumab",
+        "prior_treatments": [
+          "lumpectomy"
+        ],
+        "clinical_justification": "Patient has HER2-positive early breast cancer; Pertuzumab with trastuzumab and docetaxel is standard of care per NCCN guidelines, no prior anti-HER2 exposure.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -58,10 +63,10 @@
       },
       "agent_res": {
         "npi_verification": {
-          "npi": "1234567890",
+          "npi": "1765432194",
           "submitted_name": "Dr. James R. Hartwell, MD",
           "status": "not_found",
-          "message": "NPI 1234567890 does not exist in the CMS National Registry."
+          "message": "NPI 1765432194 has a valid check digit but isn't in the CMS NPI Registry."
         },
         "icd10_verification": [
           {
@@ -70,7 +75,7 @@
             "status": "valid",
             "official_description": "Malignant neoplasm of upper-outer quadrant of right female breast",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Malignant neoplasm of upper-outer quadrant of right female breast \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Malignant neoplasm of upper-outer quadrant of right female breast"
           },
           {
             "code": "I97.2",
@@ -78,12 +83,20 @@
             "status": "valid",
             "official_description": "Postmastectomy lymphedema syndrome",
             "description_match": false,
-            "message": "Valid ICD-10 code \u00b7 Postmastectomy lymphedema syndrome \u00b7 Description differs from official"
+            "message": "Valid ICD-10-CM code \u00b7 Postmastectomy lymphedema syndrome"
           }
         ],
-        "drug_verification": null
+        "drug_verification": {
+          "searched_name": "pertuzumab",
+          "status": "found",
+          "fda_brand": "PERJETA",
+          "generic_name": "PERTUZUMAB",
+          "manufacturer": "Genentech, Inc.",
+          "route": "INTRAVENOUS",
+          "message": "FDA label on file: PERJETA / pertuzumab (Genentech, Inc.)"
+        }
       },
-      "parse_s": 0.96
+      "parse_s": 1.22
     },
     {
       "file": "sample.pdf",
@@ -113,6 +126,9 @@
         "denial_reason": null,
         "authorization_number": "AUTH-2024-00448821",
         "notes": "Prior authorization approved for 6 cycles of Pertuzumab 420mg IV per NCCN guidelines for HER2+ breast cancer. Re-authorization required after cycle 6.",
+        "drug_name": "pertuzumab",
+        "prior_treatments": [],
+        "clinical_justification": "Patient has HER2-positive early breast cancer and no prior anti-HER2 therapy; Pertuzumab with trastuzumab and docetaxel is standard of care per NCCN guidelines.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -137,8 +153,8 @@
         "npi_verification": {
           "npi": "1234567890",
           "submitted_name": "Dr. James R. Hartwell, MD",
-          "status": "not_found",
-          "message": "NPI 1234567890 does not exist in the CMS National Registry."
+          "status": "invalid_format",
+          "message": "NPI 1234567890 fails the check-digit test, so it can't be a real NPI. Usually a typo."
         },
         "icd10_verification": [
           {
@@ -147,7 +163,7 @@
             "status": "valid",
             "official_description": "Malignant neoplasm of upper-outer quadrant of right female breast",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Malignant neoplasm of upper-outer quadrant of right female breast \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Malignant neoplasm of upper-outer quadrant of right female breast"
           },
           {
             "code": "I97.2",
@@ -155,12 +171,20 @@
             "status": "valid",
             "official_description": "Postmastectomy lymphedema syndrome",
             "description_match": false,
-            "message": "Valid ICD-10 code \u00b7 Postmastectomy lymphedema syndrome \u00b7 Description differs from official"
+            "message": "Valid ICD-10-CM code \u00b7 Postmastectomy lymphedema syndrome"
           }
         ],
-        "drug_verification": null
+        "drug_verification": {
+          "searched_name": "pertuzumab",
+          "status": "found",
+          "fda_brand": "PERJETA",
+          "generic_name": "PERTUZUMAB",
+          "manufacturer": "Genentech, Inc.",
+          "route": "INTRAVENOUS",
+          "message": "FDA label on file: PERJETA / pertuzumab (Genentech, Inc.)"
+        }
       },
-      "parse_s": 0.91
+      "parse_s": 0.98
     },
     {
       "file": "sample_approved_insulin.txt",
@@ -169,7 +193,7 @@
         "date_of_birth": "1958-11-03",
         "member_id": "UHC-882047391",
         "provider_name": "Dr. Patricia M. Ellison, MD",
-        "provider_npi": "3456789012",
+        "provider_npi": "1765432103",
         "facility_name": "Indiana University Health Methodist Hospital",
         "diagnosis_code": [
           "E11.65"
@@ -188,6 +212,11 @@
         "denial_reason": null,
         "authorization_number": "AUTH-2024-00551204",
         "notes": "Approved per ADA guidelines for uncontrolled T2DM with recurrent hypoglycemia. Annual review required. Patient must attend pump training before activation.",
+        "drug_name": null,
+        "prior_treatments": [
+          "maximum dose oral medications (Metformin 2000mg/day, Empagliflozin 25mg/day) and multiple daily insulin injections"
+        ],
+        "clinical_justification": "Patient has had uncontrolled Type 2 diabetes for 14 years with HbA1c of 10.2% despite maximum dose oral medications and multiple daily insulin injections. Continuous glucose monitoring with pump therapy is medically necessary per ADA Standards of Care for patients with recurrent hypoglycemia.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -210,10 +239,10 @@
       },
       "agent_res": {
         "npi_verification": {
-          "npi": "3456789012",
+          "npi": "1765432103",
           "submitted_name": "Dr. Patricia M. Ellison, MD",
           "status": "not_found",
-          "message": "NPI 3456789012 does not exist in the CMS National Registry."
+          "message": "NPI 1765432103 has a valid check digit but isn't in the CMS NPI Registry."
         },
         "icd10_verification": [
           {
@@ -222,20 +251,12 @@
             "status": "valid",
             "official_description": "Type 2 diabetes mellitus with hyperglycemia",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Type 2 diabetes mellitus with hyperglycemia \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Type 2 diabetes mellitus with hyperglycemia"
           }
         ],
-        "drug_verification": {
-          "searched_name": "Insulin",
-          "status": "found",
-          "fda_brand": ".Insulin Aspart Protamine and Insulin Aspart",
-          "generic_name": "INSULIN ASPART",
-          "manufacturer": "A-S Medication Solutions",
-          "route": "SUBCUTANEOUS",
-          "message": "Drug verified in FDA database \u00b7 .Insulin Aspart Protamine and Insulin Aspart"
-        }
+        "drug_verification": null
       },
-      "parse_s": 1.01
+      "parse_s": 0.84
     },
     {
       "file": "sample_approved_tms.txt",
@@ -244,7 +265,7 @@
         "date_of_birth": "1990-08-18",
         "member_id": "ANT-773920041",
         "provider_name": "Dr. Marcus D. Greene, MD",
-        "provider_npi": "2345678901",
+        "provider_npi": "1543210987",
         "facility_name": "OhioHealth Riverside Methodist Hospital",
         "diagnosis_code": [
           "F33.2"
@@ -252,7 +273,7 @@
         "diagnosis_description": [
           "Major depressive disorder, recurrent, severe without psychotic features"
         ],
-        "treatment_requested": "Transcranial Magnetic Stimulation (TMS) therapy \u2014 36 sessions",
+        "treatment_requested": "Transcranial Magnetic Stimulation (TMS) therapy, 36 sessions",
         "cpt_code": [
           "90867"
         ],
@@ -263,6 +284,15 @@
         "denial_reason": null,
         "authorization_number": "AUTH-2024-00389147",
         "notes": "Approved for treatment-resistant MDD per Anthem clinical policy PSY-048. Patient must maintain concurrent psychiatric medication management throughout TMS course.",
+        "drug_name": null,
+        "prior_treatments": [
+          "Sertraline",
+          "Escitalopram",
+          "Venlafaxine",
+          "Bupropion",
+          "CBT sessions"
+        ],
+        "clinical_justification": "Patient has a 7-year history of recurrent major depressive disorder, has failed four adequate antidepressant trials and 24 CBT sessions; TMS is FDA-cleared and indicated for treatment-resistant depression.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -285,10 +315,10 @@
       },
       "agent_res": {
         "npi_verification": {
-          "npi": "2345678901",
+          "npi": "1543210987",
           "submitted_name": "Dr. Marcus D. Greene, MD",
           "status": "not_found",
-          "message": "NPI 2345678901 does not exist in the CMS National Registry."
+          "message": "NPI 1543210987 has a valid check digit but isn't in the CMS NPI Registry."
         },
         "icd10_verification": [
           {
@@ -297,12 +327,12 @@
             "status": "valid",
             "official_description": "Major depressive disorder, recurrent severe without psychotic features",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Major depressive disorder, recurrent severe without psychotic features \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Major depressive disorder, recurrent severe without psychotic features"
           }
         ],
         "drug_verification": null
       },
-      "parse_s": 1.0
+      "parse_s": 1.27
     },
     {
       "file": "sample_denied.txt",
@@ -311,7 +341,7 @@
         "date_of_birth": "1965-08-22",
         "member_id": "AET-330481920",
         "provider_name": "Dr. Sandra L. Cho, MD",
-        "provider_npi": "9876543210",
+        "provider_npi": "1987654328",
         "facility_name": "Rush University Medical Center",
         "diagnosis_code": [
           "M17.12"
@@ -327,9 +357,16 @@
         "plan_name": "HMO Select 1000",
         "approval_status": "Denied",
         "approval_date": "2024-10-22",
-        "denial_reason": "Requested procedure does not meet medical necessity criteria. Medical records do not sufficiently document failure of all required conservative treatment modalities. Specifically, documentation of physical therapy is incomplete \u2014 only 12 of the required 20 sessions were documented in submitted records. Additionally, hyaluronic acid (viscosupplementation) injections were not attempted prior to surgical request, as required per plan guidelines (Policy MED-0042).",
+        "denial_reason": "Requested procedure does not meet medical necessity criteria. Medical records do not sufficiently document failure of all required conservative treatment modalities. Specifically, documentation of physical therapy is incomplete: only 12 of the required 20 sessions were documented in submitted records. Additionally, hyaluronic acid (viscosupplementation) injections were not attempted prior to surgical request, as required per plan guidelines (Policy MED-0042).",
         "authorization_number": null,
-        "notes": "Patient presents with severe osteoarthritis of the left knee with bone-on-bone changes confirmed on X-ray (Kellgren-Lawrence Grade 4). Patient has failed 6 months of conservative therapy including physical therapy (20 sessions), NSAIDs, and two corticosteroid injections. VAS pain score: 8/10. BMI: 28.4. KOOS score: 32 (severe functional impairment). Patient is unable to climb stairs or walk more than one city block without significant pain.",
+        "notes": "BMI 28.4, VAS pain 8/10, KOOS score 32, failed 6 months conservative therapy including 20 PT sessions, NSAIDs, and corticosteroid injections.",
+        "drug_name": null,
+        "prior_treatments": [
+          "Physical therapy (20 sessions)",
+          "NSAIDs",
+          "Corticosteroid injections (2)"
+        ],
+        "clinical_justification": "Patient has severe osteoarthritis with bone-on-bone changes, failed 6 months of conservative therapy including PT, NSAIDs, and corticosteroid injections; surgical intervention deemed necessary.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -352,10 +389,10 @@
       },
       "agent_res": {
         "npi_verification": {
-          "npi": "9876543210",
+          "npi": "1987654328",
           "submitted_name": "Dr. Sandra L. Cho, MD",
           "status": "not_found",
-          "message": "NPI 9876543210 does not exist in the CMS National Registry."
+          "message": "NPI 1987654328 has a valid check digit but isn't in the CMS NPI Registry."
         },
         "icd10_verification": [
           {
@@ -364,12 +401,12 @@
             "status": "valid",
             "official_description": "Unilateral primary osteoarthritis, left knee",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Unilateral primary osteoarthritis, left knee \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Unilateral primary osteoarthritis, left knee"
           }
         ],
         "drug_verification": null
       },
-      "parse_s": 0.99
+      "parse_s": 1.58
     },
     {
       "file": "sample_denied_gallbladder.txt",
@@ -378,7 +415,7 @@
         "date_of_birth": "1974-02-07",
         "member_id": "MOL-441038822",
         "provider_name": "Dr. Linda H. Tran, MD",
-        "provider_npi": "8901234567",
+        "provider_npi": "1812345670",
         "facility_name": "Cedars-Sinai Medical Center",
         "diagnosis_code": [
           "K80.10"
@@ -396,7 +433,10 @@
         "approval_date": "2024-10-11",
         "denial_reason": "Request does not meet Molina Healthcare medical necessity criteria for elective cholecystectomy (Policy SURG-014). Submitted records do not document a recent acute cholecystitis episode confirmed by imaging or labs, biliary colic frequency (minimum 3 documented episodes in medical record required), or dietary modification trial. Additionally, operative risk assessment (ASA classification) was not included in the submission. Provider must resubmit with complete clinical documentation including pain frequency log, dietary consultation note, and updated lab panel (CBC, LFTs, lipase).",
         "authorization_number": null,
-        "notes": "Appeal Deadline: 2024-11-11; Reviewer: Dr. F. Adeyemi, MD (General Surgery)",
+        "notes": "Patient has 4-month history of RUQ pain, ultrasound confirms cholelithiasis; one ER visit; no acute cholecystitis confirmed.",
+        "drug_name": null,
+        "prior_treatments": [],
+        "clinical_justification": "Patient presents with a 4-month history of right upper quadrant pain after meals; ultrasound confirms cholelithiasis with multiple stones; provider recommends elective laparoscopic cholecystectomy.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -419,10 +459,10 @@
       },
       "agent_res": {
         "npi_verification": {
-          "npi": "8901234567",
+          "npi": "1812345670",
           "submitted_name": "Dr. Linda H. Tran, MD",
           "status": "not_found",
-          "message": "NPI 8901234567 does not exist in the CMS National Registry."
+          "message": "NPI 1812345670 has a valid check digit but isn't in the CMS NPI Registry."
         },
         "icd10_verification": [
           {
@@ -431,12 +471,12 @@
             "status": "valid",
             "official_description": "Calculus of gallbladder with chronic cholecystitis without obstruction",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Calculus of gallbladder with chronic cholecystitis without obstruction \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Calculus of gallbladder with chronic cholecystitis without obstruction"
           }
         ],
         "drug_verification": null
       },
-      "parse_s": 0.9
+      "parse_s": 10.47
     },
     {
       "file": "sample_denied_mri.txt",
@@ -445,7 +485,7 @@
         "date_of_birth": "1982-06-14",
         "member_id": "CIG-558204817",
         "provider_name": "Dr. Kevin B. Okafor, MD",
-        "provider_npi": "5678901234",
+        "provider_npi": "1654321094",
         "facility_name": "UCHealth University of Colorado Hospital",
         "diagnosis_code": [
           "M54.42"
@@ -461,9 +501,16 @@
         "plan_name": "Open Access Plus",
         "approval_status": "Denied",
         "approval_date": "2024-11-01",
-        "denial_reason": "Does not meet medical necessity criteria per Cigna coverage policy",
+        "denial_reason": "Does not meet medical necessity criteria per Cigna coverage policy\nMUSCULO-020. MRI for low back pain requires documentation of at least 6 weeks of conservative treatment failure including physical therapy (minimum 8 sessions), NSAIDs at therapeutic dose, and activity modification. Patient has not completed conservative treatment prior to advanced imaging request. Recommend initiating physical therapy and NSAIDs first. Re-submit after 6 weeks if symptoms persist.",
         "authorization_number": null,
-        "notes": "Patient has not completed conservative treatment prior to advanced imaging request. Recommend initiating physical therapy and NSAIDs first. Re-submit after 6 weeks if symptoms persist.",
+        "notes": "Patient had 3 weeks of low back pain radiating to left leg; pain scores 6/10 at rest, 9/10 with activity.",
+        "drug_name": null,
+        "prior_treatments": [
+          "NSAIDs at therapeutic dose",
+          "activity modification",
+          "physical therapy"
+        ],
+        "clinical_justification": "Patient presents with 3 weeks of low back pain radiating to the left leg; MRI is requested to rule out disc herniation prior to treatment.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -486,10 +533,10 @@
       },
       "agent_res": {
         "npi_verification": {
-          "npi": "5678901234",
+          "npi": "1654321094",
           "submitted_name": "Dr. Kevin B. Okafor, MD",
           "status": "not_found",
-          "message": "NPI 5678901234 does not exist in the CMS National Registry."
+          "message": "NPI 1654321094 has a valid check digit but isn't in the CMS NPI Registry."
         },
         "icd10_verification": [
           {
@@ -498,12 +545,12 @@
             "status": "valid",
             "official_description": "Lumbago with sciatica, left side",
             "description_match": false,
-            "message": "Valid ICD-10 code \u00b7 Lumbago with sciatica, left side \u00b7 Description differs from official"
+            "message": "Valid ICD-10-CM code \u00b7 Lumbago with sciatica, left side"
           }
         ],
         "drug_verification": null
       },
-      "parse_s": 8.03
+      "parse_s": 11.75
     },
     {
       "file": "sample_pending_chemo.txt",
@@ -512,7 +559,7 @@
         "date_of_birth": "1951-03-29",
         "member_id": "HUM-109384720",
         "provider_name": "Dr. Rachel S. Patel, MD",
-        "provider_npi": "7890123456",
+        "provider_npi": "1432109878",
         "facility_name": "Emory University Hospital",
         "diagnosis_code": [
           "C34.11",
@@ -522,7 +569,7 @@
           "Malignant neoplasm of the upper lobe, right bronchus or lung",
           "Secondary malignant neoplasm of intrathoracic lymph nodes"
         ],
-        "treatment_requested": "Pembrolizumab (Keytruda) 200mg IV every 3 weeks \u2014 4 cycles",
+        "treatment_requested": "Pembrolizumab (Keytruda) 200mg IV every 3 weeks, 4 cycles",
         "cpt_code": [
           "96413"
         ],
@@ -532,7 +579,10 @@
         "approval_date": null,
         "denial_reason": null,
         "authorization_number": null,
-        "notes": "Additional clinical records requested by Humana Medical Review team. Awaiting submission of: (1) full pathology report confirming PD-L1 score, (2) most recent PFT results, (3) tumor board consultation note. Expected decision within 5 business days of receipt of requested records.",
+        "notes": "Additional clinical records requested by Humana Medical Review team. Awaiting submission of: (1) full pathology report confirming PD\u2011L1 score, (2) most recent PFT results, (3) tumor board consultation note. Expected decision within 5 business days of receipt of requested records.",
+        "drug_name": "pembrolizumab",
+        "prior_treatments": [],
+        "clinical_justification": "Patient is a 73-year-old male with newly diagnosed Stage IIIA non-small cell lung cancer (adenocarcinoma) and PD\u2011L1 expression 72%. Pembrolizumab monotherapy is indicated per NCCN guidelines (Category\u00a01) for PD\u2011L1\u00a0\u226550% Stage\u00a0III NSCLC in patients not eligible for chemoradiation.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -555,10 +605,10 @@
       },
       "agent_res": {
         "npi_verification": {
-          "npi": "7890123456",
+          "npi": "1432109878",
           "submitted_name": "Dr. Rachel S. Patel, MD",
           "status": "not_found",
-          "message": "NPI 7890123456 does not exist in the CMS National Registry."
+          "message": "NPI 1432109878 has a valid check digit but isn't in the CMS NPI Registry."
         },
         "icd10_verification": [
           {
@@ -567,7 +617,7 @@
             "status": "valid",
             "official_description": "Malignant neoplasm of upper lobe, right bronchus or lung",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Malignant neoplasm of upper lobe, right bronchus or lung \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Malignant neoplasm of upper lobe, right bronchus or lung"
           },
           {
             "code": "C77.1",
@@ -575,12 +625,20 @@
             "status": "valid",
             "official_description": "Secondary and unspecified malignant neoplasm of intrathoracic lymph nodes",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Secondary and unspecified malignant neoplasm of intrathoracic lymph nodes \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Secondary and unspecified malignant neoplasm of intrathoracic lymph nodes"
           }
         ],
-        "drug_verification": null
+        "drug_verification": {
+          "searched_name": "pembrolizumab",
+          "status": "found",
+          "fda_brand": "KEYTRUDA QLEX",
+          "generic_name": "PEMBROLIZUMAB AND BERAHYALURONIDASE ALFA-PMPH",
+          "manufacturer": "Merck Sharp & Dohme LLC",
+          "route": "SUBCUTANEOUS",
+          "message": "FDA label on file: KEYTRUDA QLEX / pembrolizumab and berahyaluronidase alfa-pmph (Merck Sharp & Dohme LLC)"
+        }
       },
-      "parse_s": 11.07
+      "parse_s": 21.75
     },
     {
       "file": "test_bad_npi.txt",
@@ -608,81 +666,11 @@
         "denial_reason": null,
         "authorization_number": null,
         "notes": "Patient has trialed two prior SSRIs without adequate response. Requesting continuation of current effective therapy.",
-        "confidence": {
-          "patient_name": "high",
-          "date_of_birth": "high",
-          "member_id": "high",
-          "provider_name": "high",
-          "provider_npi": "high",
-          "facility_name": "high",
-          "diagnosis_code": "high",
-          "diagnosis_description": "high",
-          "treatment_requested": "high",
-          "cpt_code": "high",
-          "payor": "high",
-          "plan_name": "high",
-          "approval_status": "high",
-          "approval_date": "low",
-          "denial_reason": "low",
-          "authorization_number": "low",
-          "notes": "medium"
-        }
-      },
-      "agent_res": {
-        "npi_verification": {
-          "npi": "1234567890",
-          "submitted_name": "Dr. Michael Sterling",
-          "status": "not_found",
-          "message": "NPI 1234567890 does not exist in the CMS National Registry."
-        },
-        "icd10_verification": [
-          {
-            "code": "F41.1",
-            "extracted_description": "Generalized anxiety disorder",
-            "status": "valid",
-            "official_description": "Generalized anxiety disorder",
-            "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Generalized anxiety disorder \u00b7 Description matches \u2713"
-          }
+        "drug_name": "escitalopram",
+        "prior_treatments": [
+          "SSRIs"
         ],
-        "drug_verification": {
-          "searched_name": "Escitalopram",
-          "status": "found",
-          "fda_brand": "Escitalopram Oral Solution",
-          "generic_name": "ESCITALOPRAM ORAL",
-          "manufacturer": "Chartwell RX, LLC",
-          "route": "ORAL",
-          "message": "Drug verified in FDA database \u00b7 Escitalopram Oral Solution"
-        }
-      },
-      "parse_s": 4.79
-    },
-    {
-      "file": "test_drug_lookup.txt",
-      "result": {
-        "patient_name": "Dorothy Kim",
-        "date_of_birth": "1952-11-30",
-        "member_id": "AET-7723900",
-        "provider_name": "Dr. Samuel Okafor",
-        "provider_npi": "1134152443",
-        "facility_name": "Heartland Cardiology Associates",
-        "diagnosis_code": [
-          "I10"
-        ],
-        "diagnosis_description": [
-          "Essential (primary) hypertension with chronic heart failure"
-        ],
-        "treatment_requested": "Lisinopril 10mg tablet once daily for blood pressure management",
-        "cpt_code": [
-          "99214"
-        ],
-        "payor": "Aetna",
-        "plan_name": "Medicare Advantage",
-        "approval_status": "Approved",
-        "approval_date": "2026-06-18",
-        "denial_reason": null,
-        "authorization_number": "AUTH-2026-091004",
-        "notes": "Patient intolerant to ARB class. ACE inhibitor appropriate per ACC/AHA guidelines.",
+        "clinical_justification": "The patient has failed two prior SSRIs, indicating a need for continuation of effective escitalopram therapy.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -705,10 +693,88 @@
       },
       "agent_res": {
         "npi_verification": {
-          "npi": "1134152443",
+          "npi": "1234567890",
+          "submitted_name": "Dr. Michael Sterling",
+          "status": "invalid_format",
+          "message": "NPI 1234567890 fails the check-digit test, so it can't be a real NPI. Usually a typo."
+        },
+        "icd10_verification": [
+          {
+            "code": "F41.1",
+            "extracted_description": "Generalized anxiety disorder",
+            "status": "valid",
+            "official_description": "Generalized anxiety disorder",
+            "description_match": true,
+            "message": "Valid ICD-10-CM code \u00b7 Generalized anxiety disorder"
+          }
+        ],
+        "drug_verification": {
+          "searched_name": "escitalopram",
+          "status": "found",
+          "fda_brand": "Escitalopram Oral Solution",
+          "generic_name": "ESCITALOPRAM ORAL",
+          "manufacturer": "Chartwell RX, LLC",
+          "route": "ORAL",
+          "message": "FDA label on file: Escitalopram Oral Solution / escitalopram oral (Chartwell RX, LLC)"
+        }
+      },
+      "parse_s": 5.97
+    },
+    {
+      "file": "test_drug_lookup.txt",
+      "result": {
+        "patient_name": "Dorothy Kim",
+        "date_of_birth": "1952-11-30",
+        "member_id": "AET-7723900",
+        "provider_name": "Dr. Samuel Okafor",
+        "provider_npi": "1543210995",
+        "facility_name": "Heartland Cardiology Associates",
+        "diagnosis_code": [
+          "I10"
+        ],
+        "diagnosis_description": [
+          "Essential (primary) hypertension with chronic heart failure"
+        ],
+        "treatment_requested": "Lisinopril 10mg tablet once daily for blood pressure management",
+        "cpt_code": [
+          "99214"
+        ],
+        "payor": "Aetna",
+        "plan_name": "Aetna Medicare Advantage",
+        "approval_status": "Approved",
+        "approval_date": "2026-06-18",
+        "denial_reason": null,
+        "authorization_number": "AUTH-2026-091004",
+        "notes": "Patient intolerant to ARB class. ACE inhibitor appropriate per ACC/AHA guidelines.",
+        "drug_name": "lisinopril",
+        "prior_treatments": [],
+        "clinical_justification": "Patient has essential hypertension and chronic heart failure; ACE inhibitor Lisinopril is appropriate per ACC/AHA guidelines and patient is intolerant to ARB class.",
+        "confidence": {
+          "patient_name": "high",
+          "date_of_birth": "high",
+          "member_id": "high",
+          "provider_name": "high",
+          "provider_npi": "high",
+          "facility_name": "high",
+          "diagnosis_code": "high",
+          "diagnosis_description": "high",
+          "treatment_requested": "high",
+          "cpt_code": "high",
+          "payor": "high",
+          "plan_name": "high",
+          "approval_status": "high",
+          "approval_date": "high",
+          "denial_reason": "high",
+          "authorization_number": "high",
+          "notes": "medium"
+        }
+      },
+      "agent_res": {
+        "npi_verification": {
+          "npi": "1543210995",
           "submitted_name": "Dr. Samuel Okafor",
           "status": "not_found",
-          "message": "NPI 1134152443 does not exist in the CMS National Registry."
+          "message": "NPI 1543210995 has a valid check digit but isn't in the CMS NPI Registry."
         },
         "icd10_verification": [
           {
@@ -717,20 +783,20 @@
             "status": "valid",
             "official_description": "Essential (primary) hypertension",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Essential (primary) hypertension \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Essential (primary) hypertension"
           }
         ],
         "drug_verification": {
-          "searched_name": "Lisinopril",
+          "searched_name": "lisinopril",
           "status": "found",
           "fda_brand": "Lisinopril and Hydrochlorothiazide",
           "generic_name": "LISINOPRIL AND HYDROCHLOROTHIAZIDE TABLETS",
           "manufacturer": "St. Mary's Medical Park Pharmacy",
           "route": "ORAL",
-          "message": "Drug verified in FDA database \u00b7 Lisinopril and Hydrochlorothiazide"
+          "message": "FDA label on file: Lisinopril and Hydrochlorothiazide / lisinopril and hydrochlorothiazide tablets (St. Mary's Medical Park Pharmacy)"
         }
       },
-      "parse_s": 0.82
+      "parse_s": 0.94
     },
     {
       "file": "test_icd10_codes.txt",
@@ -739,7 +805,7 @@
         "date_of_birth": "1965-09-02",
         "member_id": "BCBS-4490128",
         "provider_name": "Dr. Angela Chen MD",
-        "provider_npi": "1457471942",
+        "provider_npi": "1987654310",
         "facility_name": "Pacific Coast Oncology Center",
         "diagnosis_code": [
           "C50.411",
@@ -754,12 +820,15 @@
           "96413"
         ],
         "payor": "Blue Cross Blue Shield",
-        "plan_name": "Blue Cross Blue Shield PPO Platinum",
+        "plan_name": "PPO Platinum",
         "approval_status": "Approved",
         "approval_date": "2026-06-15",
         "denial_reason": null,
         "authorization_number": "AUTH-2026-088821",
         "notes": "HER2-positive confirmed by biopsy. Treatment per NCCN guidelines.",
+        "drug_name": "trastuzumab",
+        "prior_treatments": [],
+        "clinical_justification": "Treatment requested for HER2-positive breast cancer per NCCN guidelines.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -782,10 +851,10 @@
       },
       "agent_res": {
         "npi_verification": {
-          "npi": "1457471942",
+          "npi": "1987654310",
           "submitted_name": "Dr. Angela Chen MD",
           "status": "not_found",
-          "message": "NPI 1457471942 does not exist in the CMS National Registry."
+          "message": "NPI 1987654310 has a valid check digit but isn't in the CMS NPI Registry."
         },
         "icd10_verification": [
           {
@@ -794,7 +863,7 @@
             "status": "valid",
             "official_description": "Malignant neoplasm of upper-outer quadrant of right female breast",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Malignant neoplasm of upper-outer quadrant of right female breast \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Malignant neoplasm of upper-outer quadrant of right female breast"
           },
           {
             "code": "C79.51",
@@ -802,16 +871,20 @@
             "status": "valid",
             "official_description": "Secondary malignant neoplasm of bone",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Secondary malignant neoplasm of bone \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Secondary malignant neoplasm of bone"
           }
         ],
         "drug_verification": {
-          "searched_name": "kg IV",
-          "status": "not_found",
-          "message": "'kg IV' was not found in the FDA drug label database."
+          "searched_name": "trastuzumab",
+          "status": "found",
+          "fda_brand": "KADCYLA",
+          "generic_name": "ADO-TRASTUZUMAB EMTANSINE",
+          "manufacturer": "Genentech, Inc.",
+          "route": "INTRAVENOUS",
+          "message": "FDA label on file: KADCYLA / ado-trastuzumab emtansine (Genentech, Inc.)"
         }
       },
-      "parse_s": 7.92
+      "parse_s": 8.89
     },
     {
       "file": "test_real_npi.txt",
@@ -839,6 +912,11 @@
         "denial_reason": null,
         "authorization_number": null,
         "notes": "Patient has failed metformin therapy over 6 months. Requesting cardioprotective agent per ADA 2024 guidelines.",
+        "drug_name": "empagliflozin",
+        "prior_treatments": [
+          "metformin therapy"
+        ],
+        "clinical_justification": "Patient failed metformin therapy and requires cardioprotective agent per ADA guidelines.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -863,14 +941,14 @@
         "npi_verification": {
           "npi": "1679576722",
           "submitted_name": "Dr. Robert Jacobson",
-          "status": "name_mismatch",
-          "registry_name": "DAVID A WIEBE M.D.",
+          "registry_name": "David A Wiebe M.D.",
           "registry_specialty": "Orthopaedic Surgery",
           "registry_state": "NE",
-          "registry_city": "KEARNEY",
+          "registry_city": "Kearney",
           "entity_type": "Individual",
+          "status": "name_mismatch",
           "name_match": false,
-          "message": "Name mismatch: CMS registry shows 'DAVID A WIEBE M.D.' (Orthopaedic Surgery, NE)"
+          "message": "This NPI is registered to David A Wiebe M.D., not Dr. Robert Jacobson."
         },
         "icd10_verification": [
           {
@@ -879,20 +957,20 @@
             "status": "valid",
             "official_description": "Type 2 diabetes mellitus with hyperglycemia",
             "description_match": true,
-            "message": "Valid ICD-10 code \u00b7 Type 2 diabetes mellitus with hyperglycemia \u00b7 Description matches \u2713"
+            "message": "Valid ICD-10-CM code \u00b7 Type 2 diabetes mellitus with hyperglycemia"
           }
         ],
         "drug_verification": {
-          "searched_name": "10mg",
+          "searched_name": "empagliflozin",
           "status": "found",
-          "fda_brand": "NASAL DECONGESTANT PE 10mg",
-          "generic_name": "PHENYLPHRINE HCL",
-          "manufacturer": "YYBA CORP",
+          "fda_brand": "Synjardy",
+          "generic_name": "EMPAGLIFLOZIN AND METFORMIN HYDROCHLORIDE",
+          "manufacturer": "Boehringer Ingelheim Pharmaceuticals, Inc.",
           "route": "ORAL",
-          "message": "Drug verified in FDA database \u00b7 NASAL DECONGESTANT PE 10mg"
+          "message": "FDA label on file: Synjardy / empagliflozin and metformin hydrochloride (Boehringer Ingelheim Pharmaceuticals, Inc.)"
         }
       },
-      "parse_s": 0.9
+      "parse_s": 2.35
     }
   ]
 }

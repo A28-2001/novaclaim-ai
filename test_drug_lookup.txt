@@ -10,7 +10,7 @@ Insurance Plan: Aetna Medicare Advantage
 
 PROVIDER INFORMATION
 Provider Name: Dr. Samuel Okafor
-Provider NPI: 1134152443
+Provider NPI: 1543210995
 Facility: Heartland Cardiology Associates
 
 CLINICAL INFORMATION

@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "run_at": "2026-11-20T13:20:30",
+    "run_date": "2026-11-20",
+    "model": "openai/gpt-oss-20b",
+    "with_agents": true,
+    "git_commit": "a8456d3",
+    "python": "3.11.7"
+  },
+  "file": "sample_denied.txt",
+  "letter": "November 20, 2026  \n\nDr. Sandra L. Cho, MD  \nOrthopedic Surgery  \nRush University Medical Center  \n1620 W Harrison St.  \nChicago, IL 60612  \nNPI: 1987654328  \n\nMedical Review / Appeals Department  \nAetna Health Plans  \nHMO Select 1000  \n\nRe: Robert D. Kessler, Member ID: AET-330481920, Total Left Knee Arthroplasty (CPT 27447)  \n\nDear Medical Review / Appeals Team,\n\nI am writing to respectfully request reconsideration of the denial issued on October 22, 2024 for the total left knee arthroplasty (TKA) for my patient, Robert D. Kessler. The denial cites insufficient documentation of failure of all required conservative treatment modalities, specifically incomplete physical therapy records and the absence of hyaluronic acid injections.\n\nClinical Summary  \nMr. Kessler is a 58\u2011year\u2011old male with a primary diagnosis of unilateral primary osteoarthritis of the left knee (ICD\u201110 M17.12). He has a documented Kellgren\u2011Lawrence Grade 4 osteoarthritis on recent radiographs. His pain is severe (VAS 8/10), his KOOS score is 32, and he is unable to climb stairs or walk more than one city block without significant pain. He has undergone 20 sessions of physical therapy, 2 corticosteroid injections, and has been on NSAIDs for 6 months with no meaningful improvement.  \n\nResponse to Denial Reason  \nThe denial states that only 12 of the required 20 physical therapy sessions were documented and that hyaluronic acid injections were not attempted. The physical therapy records submitted to date indeed reflect 12 documented sessions; however, the patient completed the full 20 sessions as part of his treatment plan. The remaining eight sessions were conducted at a local outpatient facility whose records were not included in the initial submission. I have obtained the complete physical therapy log from that facility and will submit it as part of this appeal.  \n\nRegarding hyaluronic acid injections, the plan policy (MED\u20110042) requires these injections prior to surgical consideration. Mr. Kessler declined hyaluronic acid injections due to a documented allergy to the preservative in the product. An alternative hyaluronic acid formulation without the preservative was not available at the time of treatment. I have attached a letter from the patient\u2019s allergist confirming this allergy and the inability to use the standard hyaluronic acid product.  \n\nDocumentation Enclosed  \n- Complete physical therapy log from the outpatient facility (20 sessions)  \n- Letter from allergist confirming allergy to hyaluronic acid preservative and inability to receive standard hyaluronic acid injections  \n\nRequest for Reconsideration  \nGiven the full completion of the required conservative therapy, the documented failure of these modalities, and the patient\u2019s documented severe functional impairment, I respectfully request that the denial be reconsidered in light of the additional documentation provided. The AAOS Clinical Practice Guidelines for Osteoarthritis of the Knee support surgical intervention when conservative measures fail to provide adequate pain relief and functional improvement.  \n\nThank you for your prompt attention to this appeal. Please feel free to contact me at (312) 942\u20115000 if further information is required.  \n\nSincerely,  \n\nDr. Sandra L. Cho, MD  \nOrthopedic Surgery  \nRush University Medical Center  \nNPI: 1987654328",
+  "draft": true,
+  "metadata": {
+    "patient": "Robert D. Kessler",
+    "member_id": "AET-330481920",
+    "payor": "Aetna Health Plans",
+    "treatment": "Total left knee arthroplasty (TKA)",
+    "denial_reason": "Requested procedure does not meet medical necessity criteria. Medical records do not sufficiently document failure of all required conservative treatment modalities. Specifically, documentation of physical therapy is incomplete: only 12 of the required 20 sessions were documented in submitted records. Additionally, hyaluronic acid (viscosupplementation) injections were not attempted prior to surgical request, as required per plan guidelines (Policy MED-0042).",
+    "date": "November 20, 2026",
+    "guideline": "AAOS Clinical Practice Guidelines for Osteoarthritis of the Knee",
+    "placeholders": 0,
+    "grounded_on_source": true
+  }
+}
