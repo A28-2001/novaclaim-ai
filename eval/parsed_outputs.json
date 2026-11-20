@@ -1,10 +1,10 @@
 {
   "meta": {
-    "run_at": "2026-11-20T13:20:30",
+    "run_at": "2026-11-20T13:26:32",
     "run_date": "2026-11-20",
     "model": "openai/gpt-oss-20b",
     "with_agents": true,
-    "git_commit": "a8456d3",
+    "git_commit": "573f7e7",
     "python": "3.11.7"
   },
   "documents": [
@@ -37,10 +37,8 @@
         "authorization_number": "AUTH-2024-00448821",
         "notes": "Prior authorization approved for 6 cycles of Pertuzumab 420mg IV per NCCN guidelines for HER2+ breast cancer. Re-authorization required after cycle 6.",
         "drug_name": "pertuzumab",
-        "prior_treatments": [
-          "lumpectomy"
-        ],
-        "clinical_justification": "Patient has HER2-positive early breast cancer; Pertuzumab with trastuzumab and docetaxel is standard of care per NCCN guidelines, no prior anti-HER2 exposure.",
+        "prior_treatments": [],
+        "clinical_justification": "Patient has HER2-positive early breast cancer confirmed via biopsy and completed surgery; Pertuzumab with trastuzumab and docetaxel is the standard of care per NCCN guidelines (Category 1 recommendation).",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -96,7 +94,7 @@
           "message": "FDA label on file: PERJETA / pertuzumab (Genentech, Inc.)"
         }
       },
-      "parse_s": 1.22
+      "parse_s": 0.79
     },
     {
       "file": "sample.pdf",
@@ -127,8 +125,10 @@
         "authorization_number": "AUTH-2024-00448821",
         "notes": "Prior authorization approved for 6 cycles of Pertuzumab 420mg IV per NCCN guidelines for HER2+ breast cancer. Re-authorization required after cycle 6.",
         "drug_name": "pertuzumab",
-        "prior_treatments": [],
-        "clinical_justification": "Patient has HER2-positive early breast cancer and no prior anti-HER2 therapy; Pertuzumab with trastuzumab and docetaxel is standard of care per NCCN guidelines.",
+        "prior_treatments": [
+          "lumpectomy"
+        ],
+        "clinical_justification": "Patient has HER2-positive early breast cancer confirmed via biopsy on 2024-09-18 and has completed surgery (lumpectomy); Pertuzumab is the standard of care per NCCN guidelines.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -184,7 +184,7 @@
           "message": "FDA label on file: PERJETA / pertuzumab (Genentech, Inc.)"
         }
       },
-      "parse_s": 0.98
+      "parse_s": 0.94
     },
     {
       "file": "sample_approved_insulin.txt",
@@ -214,7 +214,9 @@
         "notes": "Approved per ADA guidelines for uncontrolled T2DM with recurrent hypoglycemia. Annual review required. Patient must attend pump training before activation.",
         "drug_name": null,
         "prior_treatments": [
-          "maximum dose oral medications (Metformin 2000mg/day, Empagliflozin 25mg/day) and multiple daily insulin injections"
+          "Metformin 2000mg/day",
+          "Empagliflozin 25mg/day",
+          "multiple daily insulin injections"
         ],
         "clinical_justification": "Patient has had uncontrolled Type 2 diabetes for 14 years with HbA1c of 10.2% despite maximum dose oral medications and multiple daily insulin injections. Continuous glucose monitoring with pump therapy is medically necessary per ADA Standards of Care for patients with recurrent hypoglycemia.",
         "confidence": {
@@ -256,7 +258,7 @@
         ],
         "drug_verification": null
       },
-      "parse_s": 0.84
+      "parse_s": 0.78
     },
     {
       "file": "sample_approved_tms.txt",
@@ -286,13 +288,13 @@
         "notes": "Approved for treatment-resistant MDD per Anthem clinical policy PSY-048. Patient must maintain concurrent psychiatric medication management throughout TMS course.",
         "drug_name": null,
         "prior_treatments": [
-          "Sertraline",
-          "Escitalopram",
-          "Venlafaxine",
-          "Bupropion",
-          "CBT sessions"
+          "Sertraline 200mg",
+          "Escitalopram 20mg",
+          "Venlafaxine 225mg",
+          "Bupropion 450mg",
+          "24 sessions of CBT"
         ],
-        "clinical_justification": "Patient has a 7-year history of recurrent major depressive disorder, has failed four adequate antidepressant trials and 24 CBT sessions; TMS is FDA-cleared and indicated for treatment-resistant depression.",
+        "clinical_justification": "Patient has a 7-year history of recurrent major depressive disorder and has failed four adequate antidepressant trials and 24 sessions of CBT. TMS is FDA\u2011cleared and indicated per APA guidelines for treatment\u2011resistant depression.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -332,7 +334,7 @@
         ],
         "drug_verification": null
       },
-      "parse_s": 1.27
+      "parse_s": 0.86
     },
     {
       "file": "sample_denied.txt",
@@ -359,14 +361,14 @@
         "approval_date": "2024-10-22",
         "denial_reason": "Requested procedure does not meet medical necessity criteria. Medical records do not sufficiently document failure of all required conservative treatment modalities. Specifically, documentation of physical therapy is incomplete: only 12 of the required 20 sessions were documented in submitted records. Additionally, hyaluronic acid (viscosupplementation) injections were not attempted prior to surgical request, as required per plan guidelines (Policy MED-0042).",
         "authorization_number": null,
-        "notes": "BMI 28.4, VAS pain 8/10, KOOS score 32, failed 6 months conservative therapy including 20 PT sessions, NSAIDs, and corticosteroid injections.",
+        "notes": "Patient has failed 6 months of conservative therapy including physical therapy (20 sessions), NSAIDs, and two corticosteroid injections. VAS pain score: 8/10. BMI: 28.4. KOOS score: 32. Patient unable to climb stairs or walk more than one city block without significant pain. Physical therapy documentation incomplete: only 12 of 20 sessions documented. No hyaluronic acid injections attempted.",
         "drug_name": null,
         "prior_treatments": [
           "Physical therapy (20 sessions)",
           "NSAIDs",
-          "Corticosteroid injections (2)"
+          "two corticosteroid injections"
         ],
-        "clinical_justification": "Patient has severe osteoarthritis with bone-on-bone changes, failed 6 months of conservative therapy including PT, NSAIDs, and corticosteroid injections; surgical intervention deemed necessary.",
+        "clinical_justification": "Patient presents with severe osteoarthritis of the left knee with bone-on-bone changes confirmed on X-ray, failed 6 months of conservative therapy including physical therapy, NSAIDs, and corticosteroid injections.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -406,7 +408,7 @@
         ],
         "drug_verification": null
       },
-      "parse_s": 1.58
+      "parse_s": 0.91
     },
     {
       "file": "sample_denied_gallbladder.txt",
@@ -433,10 +435,10 @@
         "approval_date": "2024-10-11",
         "denial_reason": "Request does not meet Molina Healthcare medical necessity criteria for elective cholecystectomy (Policy SURG-014). Submitted records do not document a recent acute cholecystitis episode confirmed by imaging or labs, biliary colic frequency (minimum 3 documented episodes in medical record required), or dietary modification trial. Additionally, operative risk assessment (ASA classification) was not included in the submission. Provider must resubmit with complete clinical documentation including pain frequency log, dietary consultation note, and updated lab panel (CBC, LFTs, lipase).",
         "authorization_number": null,
-        "notes": "Patient has 4-month history of RUQ pain, ultrasound confirms cholelithiasis; one ER visit; no acute cholecystitis confirmed.",
+        "notes": "Appeal deadline 2024-11-11; reviewer Dr. F. Adeyemi, MD (General Surgery).",
         "drug_name": null,
         "prior_treatments": [],
-        "clinical_justification": "Patient presents with a 4-month history of right upper quadrant pain after meals; ultrasound confirms cholelithiasis with multiple stones; provider recommends elective laparoscopic cholecystectomy.",
+        "clinical_justification": "Patient presents with a 4-month history of right upper quadrant pain after meals; ultrasound confirms cholelithiasis with multiple stones. Provider recommends elective laparoscopic cholecystectomy. One ER visit documented for abdominal pain.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -476,7 +478,7 @@
         ],
         "drug_verification": null
       },
-      "parse_s": 10.47
+      "parse_s": 8.21
     },
     {
       "file": "sample_denied_mri.txt",
@@ -501,16 +503,12 @@
         "plan_name": "Open Access Plus",
         "approval_status": "Denied",
         "approval_date": "2024-11-01",
-        "denial_reason": "Does not meet medical necessity criteria per Cigna coverage policy\nMUSCULO-020. MRI for low back pain requires documentation of at least 6 weeks of conservative treatment failure including physical therapy (minimum 8 sessions), NSAIDs at therapeutic dose, and activity modification. Patient has not completed conservative treatment prior to advanced imaging request. Recommend initiating physical therapy and NSAIDs first. Re-submit after 6 weeks if symptoms persist.",
+        "denial_reason": "Does not meet medical necessity criteria per Cigna coverage policy MUSCULO-020. MRI for low back pain requires documentation of at least 6 weeks of conservative treatment failure including physical therapy (minimum 8 sessions), NSAIDs at therapeutic dose, and activity modification. Patient has not completed conservative treatment prior to advanced imaging request. Recommend initiating physical therapy and NSAIDs first. Re-submit after 6 weeks if symptoms persist.",
         "authorization_number": null,
-        "notes": "Patient had 3 weeks of low back pain radiating to left leg; pain scores 6/10 at rest, 9/10 with activity.",
+        "notes": "Patient presents with 3 weeks of low back pain radiating to left leg (L4-L5 distribution) and pain score 6/10 at rest, 9/10 with activity.",
         "drug_name": null,
-        "prior_treatments": [
-          "NSAIDs at therapeutic dose",
-          "activity modification",
-          "physical therapy"
-        ],
-        "clinical_justification": "Patient presents with 3 weeks of low back pain radiating to the left leg; MRI is requested to rule out disc herniation prior to treatment.",
+        "prior_treatments": [],
+        "clinical_justification": "Patient presents with 3 weeks of low back pain radiating to the left leg (L4-L5 distribution) and pain score 6/10 at rest, 9/10 with activity. Provider requests MRI to rule out disc herniation before initiating treatment.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -550,7 +548,7 @@
         ],
         "drug_verification": null
       },
-      "parse_s": 11.75
+      "parse_s": 10.76
     },
     {
       "file": "sample_pending_chemo.txt",
@@ -582,7 +580,7 @@
         "notes": "Additional clinical records requested by Humana Medical Review team. Awaiting submission of: (1) full pathology report confirming PD\u2011L1 score, (2) most recent PFT results, (3) tumor board consultation note. Expected decision within 5 business days of receipt of requested records.",
         "drug_name": "pembrolizumab",
         "prior_treatments": [],
-        "clinical_justification": "Patient is a 73-year-old male with newly diagnosed Stage IIIA non-small cell lung cancer (adenocarcinoma) and PD\u2011L1 expression 72%. Pembrolizumab monotherapy is indicated per NCCN guidelines (Category\u00a01) for PD\u2011L1\u00a0\u226550% Stage\u00a0III NSCLC in patients not eligible for chemoradiation.",
+        "clinical_justification": "Patient is a 73\u2011year\u2011old male with newly diagnosed Stage IIIA non\u2011small cell lung cancer, PD\u2011L1 expression 72%, not surgical candidate; pembrolizumab monotherapy indicated per NCCN guidelines for PD\u2011L1 \u226550% Stage III NSCLC.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -638,7 +636,7 @@
           "message": "FDA label on file: KEYTRUDA QLEX / pembrolizumab and berahyaluronidase alfa-pmph (Merck Sharp & Dohme LLC)"
         }
       },
-      "parse_s": 21.75
+      "parse_s": 12.71
     },
     {
       "file": "test_bad_npi.txt",
@@ -670,7 +668,7 @@
         "prior_treatments": [
           "SSRIs"
         ],
-        "clinical_justification": "The patient has failed two prior SSRIs, indicating a need for continuation of effective escitalopram therapy.",
+        "clinical_justification": "Patient has trialed two prior SSRIs without adequate response. Requesting continuation of current effective therapy.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -688,7 +686,10 @@
           "approval_date": "high",
           "denial_reason": "high",
           "authorization_number": "high",
-          "notes": "medium"
+          "notes": "medium",
+          "drug_name": "high",
+          "prior_treatments": "high",
+          "clinical_justification": "high"
         }
       },
       "agent_res": {
@@ -718,7 +719,7 @@
           "message": "FDA label on file: Escitalopram Oral Solution / escitalopram oral (Chartwell RX, LLC)"
         }
       },
-      "parse_s": 5.97
+      "parse_s": 13.55
     },
     {
       "file": "test_drug_lookup.txt",
@@ -748,7 +749,7 @@
         "notes": "Patient intolerant to ARB class. ACE inhibitor appropriate per ACC/AHA guidelines.",
         "drug_name": "lisinopril",
         "prior_treatments": [],
-        "clinical_justification": "Patient has essential hypertension and chronic heart failure; ACE inhibitor Lisinopril is appropriate per ACC/AHA guidelines and patient is intolerant to ARB class.",
+        "clinical_justification": "Patient intolerant to ARB class. ACE inhibitor appropriate per ACC/AHA guidelines.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -766,7 +767,7 @@
           "approval_date": "high",
           "denial_reason": "high",
           "authorization_number": "high",
-          "notes": "medium"
+          "notes": "high"
         }
       },
       "agent_res": {
@@ -796,7 +797,7 @@
           "message": "FDA label on file: Lisinopril and Hydrochlorothiazide / lisinopril and hydrochlorothiazide tablets (St. Mary's Medical Park Pharmacy)"
         }
       },
-      "parse_s": 0.94
+      "parse_s": 10.15
     },
     {
       "file": "test_icd10_codes.txt",
@@ -820,7 +821,7 @@
           "96413"
         ],
         "payor": "Blue Cross Blue Shield",
-        "plan_name": "PPO Platinum",
+        "plan_name": "Blue Cross Blue Shield PPO Platinum",
         "approval_status": "Approved",
         "approval_date": "2026-06-15",
         "denial_reason": null,
@@ -828,7 +829,7 @@
         "notes": "HER2-positive confirmed by biopsy. Treatment per NCCN guidelines.",
         "drug_name": "trastuzumab",
         "prior_treatments": [],
-        "clinical_justification": "Treatment requested for HER2-positive breast cancer per NCCN guidelines.",
+        "clinical_justification": "Treatment is indicated for HER2-positive breast cancer per NCCN guidelines.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -884,7 +885,7 @@
           "message": "FDA label on file: KADCYLA / ado-trastuzumab emtansine (Genentech, Inc.)"
         }
       },
-      "parse_s": 8.89
+      "parse_s": 9.27
     },
     {
       "file": "test_real_npi.txt",
@@ -906,7 +907,7 @@
           "99213"
         ],
         "payor": "UnitedHealthcare",
-        "plan_name": "UnitedHealthcare Gold PPO",
+        "plan_name": "Gold PPO",
         "approval_status": "Pending",
         "approval_date": null,
         "denial_reason": null,
@@ -914,9 +915,9 @@
         "notes": "Patient has failed metformin therapy over 6 months. Requesting cardioprotective agent per ADA 2024 guidelines.",
         "drug_name": "empagliflozin",
         "prior_treatments": [
-          "metformin therapy"
+          "metformin"
         ],
-        "clinical_justification": "Patient failed metformin therapy and requires cardioprotective agent per ADA guidelines.",
+        "clinical_justification": "Patient has failed metformin therapy over 6 months. Requesting cardioprotective agent per ADA 2024 guidelines.",
         "confidence": {
           "patient_name": "high",
           "date_of_birth": "high",
@@ -970,7 +971,7 @@
           "message": "FDA label on file: Synjardy / empagliflozin and metformin hydrochloride (Boehringer Ingelheim Pharmaceuticals, Inc.)"
         }
       },
-      "parse_s": 2.35
+      "parse_s": 11.24
     }
   ]
 }
