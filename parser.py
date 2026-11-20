@@ -83,20 +83,38 @@ def _request_extraction(client, prompt: str, max_tokens: int = 2048) -> dict:
         return _extract_json(response.choices[0].message.content)
 
 
-def _groq_with_retry(client, max_retries: int = 4, **kwargs):
+MAX_RATE_LIMIT_WAIT = 60   # seconds of total waiting before giving up
+
+
+def _retry_after(exc) -> float | None:
+    """Seconds Groq asks us to wait, from the 429 response's retry-after header."""
+    try:
+        value = exc.response.headers.get("retry-after")
+        return float(value) if value is not None else None
+    except Exception:
+        return None
+
+
+def _groq_with_retry(client, max_retries: int = 5, **kwargs):
     """
-    Call client.chat.completions.create with exponential backoff on rate limit errors.
-    Retries up to max_retries times: waits 2s, 4s, 8s, 16s between attempts.
+    Call client.chat.completions.create, waiting out rate limits.
+
+    The free tier allows about 8,000 tokens per minute for gpt-oss, so a burst
+    (a parse plus an appeal draft plus its fact check) can briefly exceed it.
+    Waits as long as Groq's retry-after header says (or backs off 4, 8, 16 s),
+    up to MAX_RATE_LIMIT_WAIT seconds in total.
     """
+    waited = 0.0
     for attempt in range(max_retries):
         try:
             return client.chat.completions.create(**kwargs)
         except Exception as e:
             err = str(e).lower()
             is_rate_limit = "rate limit" in err or "429" in err or "too many" in err
-            if is_rate_limit and attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)  # 2, 4, 8, 16 seconds
+            wait = min(_retry_after(e) or 2 ** (attempt + 2), 30) + 0.5
+            if is_rate_limit and attempt < max_retries - 1 and waited + wait <= MAX_RATE_LIMIT_WAIT:
                 time.sleep(wait)
+                waited += wait
             else:
                 raise
 

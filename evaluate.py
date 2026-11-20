@@ -729,6 +729,8 @@ def _save_appeal_demo(outputs: list, meta: dict) -> None:
         return
     try:
         from appeal_agent import AppealAgent
+        print("  Waiting 60 s for Groq's per-minute token budget to reset before the appeal draft…")
+        time.sleep(60)
         text = _read_document(os.path.join(ROOT, APPEAL_DEMO_FILE))
         draft = AppealAgent().generate(doc["result"], doc.get("agent_res"), None, text)
         meta_a = draft["metadata"]

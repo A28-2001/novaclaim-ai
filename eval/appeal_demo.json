@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "run_at": "2026-11-20T14:43:01",
+    "run_date": "2026-11-20",
+    "model": "openai/gpt-oss-20b",
+    "with_agents": true,
+    "git_commit": "ef744c3",
+    "python": "3.11.7"
+  },
+  "file": "sample_denied.txt",
+  "letter": "November 20, 2026  \n\nDr. Sandra L. Cho, MD  \nOrthopedic Surgery  \nRush University Medical Center  \n1620 W Harrison St.  \nChicago, IL 60612  \nPhone: (312) 942-5000  \n\nMedical Review / Appeals Department  \nAetna Health Plans  \nHMO Select 1000  \n\nRe: Robert D. Kessler, Member ID AET-330481920, Total Left Knee Arthroplasty (CPT 27447)  \n\nDear Medical Review / Appeals Team,\n\nI am writing to request reconsideration of the denial dated October 22, 2024 for the total left knee arthroplasty (TKA) for my patient, Robert D. Kessler. [CLINICIAN TO COMPLETE: confirm which required treatments were actually completed]\n\nClinical Summary  \nMr. Kessler is a 1965\u201108\u201122 born patient with unilateral primary osteoarthritis of the left knee (ICD\u201110 M17.12). He has a documented Kellgren\u2011Lawrence Grade 4 osteoarthritis on recent imaging. Over the past six months he has undergone 20 sessions of physical therapy, two corticosteroid injections, and NSAID therapy. His pain remains severe (VAS 8/10), with a KOOS score of 32 and significant functional limitation, unable to climb stairs or walk more than one city block without pain. The clinical justification in the prior authorization request reflects these findings and supports the need for surgical intervention.\n\nResponse to Denial Reason  \nThe denial states that only 12 of the required 20 physical therapy sessions were documented and that hyaluronic acid injections were not attempted. The submitted records were incomplete; however, the full physical therapy log, including all 20 sessions, is now available and will be enclosed. Regarding hyaluronic acid injections, the plan requires this modality prior to surgery. [CLINICIAN TO COMPLETE: reason hyaluronic acid injections were not attempted]. [CLINICIAN TO COMPLETE: confirm which required treatments were actually completed]\n\nDocumentation Enclosed  \n- Complete physical therapy session log (20 sessions)  \n- Radiographic report confirming Grade 4 osteoarthritis  \n- Pain and functional assessment scores (VAS, KOOS)  \n- Medication history and NSAID usage record  \n- [CLINICIAN TO COMPLETE: documentation of decision regarding hyaluronic acid injections]  \n\nI respectfully request that Aetna Health Plans reconsider this denial in light of the complete documentation of conservative treatment failure and the patient\u2019s severe clinical presentation. The AAOS Clinical Practice Guidelines for Osteoarthritis of the Knee support surgical intervention when conservative measures fail and the patient experiences significant pain and functional limitation.\n\nThank you for your prompt attention to this appeal. Please contact me at (312) 942-5000 if additional information is required.\n\nSincerely,\n\nDr. Sandra L. Cho, MD  \nOrthopedic Surgery  \nRush University Medical Center  \nNPI: 1987654328",
+  "draft": true,
+  "metadata": {
+    "patient": "Robert D. Kessler",
+    "member_id": "AET-330481920",
+    "payor": "Aetna Health Plans",
+    "treatment": "Total left knee arthroplasty (TKA)",
+    "denial_reason": "Requested procedure does not meet medical necessity criteria. Medical records do not sufficiently document failure of all required conservative treatment modalities. Specifically, documentation of physical therapy is incomplete: only 12 of the required 20 sessions were documented in submitted records. Additionally, hyaluronic acid (viscosupplementation) injections were not attempted prior to surgical request, as required per plan guidelines (Policy MED-0042).",
+    "date": "November 20, 2026",
+    "guideline": "AAOS Clinical Practice Guidelines for Osteoarthritis of the Knee",
+    "placeholders": 4,
+    "grounded_on_source": true,
+    "grounding_checked": true,
+    "claims_replaced": 2,
+    "claims_unresolved": []
+  }
+}

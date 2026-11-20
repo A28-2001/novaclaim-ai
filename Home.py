@@ -133,7 +133,8 @@ def appeal_block(case: dict, key: str, saved: dict | None = None) -> None:
         if not HAS_KEY:
             st.caption("Drafting needs a Groq API key, which isn't configured on this deployment.")
         else:
-            st.caption("Calls the Groq LLM with this document. Takes about 5–15 seconds.")
+            st.caption("Drafts with the Groq LLM, then fact-checks the draft against the document. "
+                       "Usually 15 to 40 seconds.")
     if clicked:
         count_run()
         with st.spinner("Drafting from the document…"):
@@ -160,6 +161,10 @@ def appeal_block(case: dict, key: str, saved: dict | None = None) -> None:
       f'<span class="nc-draft">Draft · requires clinician review</span>'
       f'<span class="nc-small">{gaps} gap{"s" if gaps != 1 else ""} marked for the clinician · {B.e(check)}'
       f'{" · cites " + B.e(meta["guideline"]) if meta.get("guideline") else ""}</span></div>')
+    if not meta.get("grounding_checked"):
+        st.warning("The AI fact check couldn't run this time (the free LLM tier was busy), so only the "
+                   "rule-based check was applied. Review every statement against the record, or try again "
+                   "in a minute.")
     if meta.get("claims_unresolved"):
         st.warning("The grounding check flagged statements it couldn't replace automatically. Verify these "
                    "against the record before using the draft: " + " | ".join(meta["claims_unresolved"])[:600])
@@ -210,8 +215,8 @@ H(f"""
   <div class="nc-hero-inner">
     <div class="nc-brand"><span class="nc-mark">NC</span> NovaClaim AI</div>
     <h1>Your doctor already decided. <em>Now the paperwork has to agree.</em></h1>
-    <p class="sub">NovaClaim reads a prior authorization request, has four AI agents check it against public
-    health databases, and shows what to fix before it's sent, or drafts the appeal if it was denied.</p>
+    <p class="sub">NovaClaim reads a prior authorization request, has four AI agents verify the doctor and codes,
+    score how ready it is, and show what to fix before it's sent, or draft the appeal if it was denied.</p>
     <div class="nc-ctas">
       <a class="nc-cta solid" href="#read" data-jump="read">Follow one denied request ↓</a>
       <a class="nc-cta ghost" href="#try" data-jump="try">Try it yourself</a>
@@ -485,8 +490,8 @@ with a_col:
     H(f"""
     <div class="nc-card nc-reveal">
       <p style="line-height:1.75;margin-top:0">AI Implementation Analyst. NovaClaim is a portfolio project: LLM extraction,
-      four agents that check the result against public health data, a submission-readiness score, a grounded appeal
-      drafter, an evaluation harness with hand-labeled ground truth, and a SQL analytics layer.</p>
+      four agents (registry and code validation, coverage, submission readiness, and a fact-checked appeal drafter),
+      an evaluation harness with hand-labeled ground truth, and a SQL analytics layer.</p>
       <p class="nc-small">Prototype on synthetic data. Not a medical or billing tool, and not HIPAA-ready.</p>
       <div class="nc-links"><a href="{F.LINKEDIN_URL}" target="_blank" rel="noopener">LinkedIn</a>
       <a href="{F.GITHUB_URL}" target="_blank" rel="noopener">GitHub</a><a href="mailto:{F.EMAIL}">{F.EMAIL}</a></div>

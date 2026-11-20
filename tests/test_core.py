@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from appeal_agent import _find_span, get_guideline         # noqa: E402
+from appeal_agent import _find_span, _overclaims, get_guideline  # noqa: E402
 from parser import _documented_treatments                   # noqa: E402
 from coverage_agent import CoverageAgent                    # noqa: E402
 from risk_scorer import ReadinessScorer                     # noqa: E402
@@ -111,6 +111,16 @@ def test_grounding_replacement_tolerates_hyphen_variants():
     letter = "He is a 58\u2011year\u2011old  male. Other text."
     assert _find_span(letter, "He is a 58-year-old male.") == (0, 26)
     assert _find_span(letter, "Not in the letter.") is None
+
+
+def test_overclaims_flagged_when_denial_says_something_is_missing():
+    letter = ("This demonstrates that all required conservative treatment modalities have been attempted. "
+              "Given the documented failure of all conservative treatments, I request approval. "
+              "He completed 20 sessions of physical therapy.")
+    denial = "Hyaluronic acid injections were not attempted."
+    flagged = [c["sentence"] for c in _overclaims(letter, denial, [])]
+    assert len(flagged) == 2 and not any("20 sessions" in f for f in flagged)
+    assert _overclaims(letter, "Service not covered under the plan.", []) == []
 
 
 if __name__ == "__main__":
