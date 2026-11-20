@@ -234,7 +234,10 @@ SOURCE DOCUMENT
         audit = f"""You are auditing a draft appeal letter for statements the source document does not support.
 
 List every sentence in the LETTER that states a fact about the patient, their history, treatments, test
-results, allergies, records, other providers or events that is NOT stated in the SOURCE DOCUMENT.
+results, allergies, records, other providers or events that is NOT stated in the SOURCE DOCUMENT, or that
+CONTRADICTS it. Include summary claims that go further than the source, for example "all required
+treatments were attempted" when the source or the denial says one was not, and ages that the source
+doesn't state.
 Ignore: letter formatting, the date, addresses copied from the source, polite requests, sentences that
 already contain [CLINICIAN TO COMPLETE ...], and general statements about the cited guideline.
 

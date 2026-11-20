@@ -62,8 +62,8 @@ Extraction was scored against hand labels on **12 synthetic prior authorization 
 | Hallucination rate on fields absent from the document | 0.0% (0 / 9) |
 | Documents parsed successfully | 12 / 12 |
 | Documents with every field correct | 12 / 12 |
-| Median extraction time (one LLM call) | 8.7 s (max 13.5 s) |
-| Median end-to-end time (extraction + validation, coverage and readiness checks) | 9.2 s (max 14.1 s) |
+| Median extraction time (one LLM call) | 2.0 s (max 29.3 s) |
+| Median end-to-end time (extraction + validation, coverage and readiness checks) | 2.6 s (max 30.0 s) |
 | Field accuracy, full-form documents | 100.0% |
 | Field accuracy, short-form documents | 100.0% |
 
