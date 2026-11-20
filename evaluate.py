@@ -731,10 +731,19 @@ def _save_appeal_demo(outputs: list, meta: dict) -> None:
         from appeal_agent import AppealAgent
         text = _read_document(os.path.join(ROOT, APPEAL_DEMO_FILE))
         draft = AppealAgent().generate(doc["result"], doc.get("agent_res"), None, text)
+        meta_a = draft["metadata"]
+        if not meta_a.get("grounding_checked") or meta_a.get("claims_unresolved"):
+            if os.path.exists(APPEAL_DEMO_PATH):
+                os.remove(APPEAL_DEMO_PATH)      # never leave a stale or unchecked draft on the site
+            why = ("the grounding check didn't run" if not meta_a.get("grounding_checked") else
+                   f"{len(meta_a['claims_unresolved'])} unsupported statement(s) couldn't be replaced")
+            print(f"  Did not save a sample appeal draft: {why}. The story will offer a live draft instead.")
+            return
         with open(APPEAL_DEMO_PATH, "w", encoding="utf-8") as fh:
             json.dump({"meta": meta, "file": APPEAL_DEMO_FILE, **draft}, fh, indent=2, default=str)
         print(f"  Saved a sample appeal draft to {os.path.relpath(APPEAL_DEMO_PATH, ROOT)} "
-              f"({draft['metadata']['placeholders']} gaps marked for the clinician)")
+              f"({meta_a['placeholders']} gaps marked for the clinician, "
+              f"{meta_a['claims_replaced']} unsupported statement(s) caught by the grounding check)")
     except Exception as e:
         print(f"  (Skipped the sample appeal draft: {type(e).__name__}: {e})")
 

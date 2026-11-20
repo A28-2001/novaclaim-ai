@@ -1,5 +1,6 @@
 from groq import Groq
 import json
+import re
 import os
 import time
 
@@ -138,7 +139,7 @@ Fields to extract:
 - authorization_number: Auth number if approved
 - notes: Any other clinically relevant details
 - drug_name: If a medication is requested, its generic name (e.g. "pembrolizumab", "insulin glargine"); null if the request is a procedure, imaging or device
-- prior_treatments: List of treatments the document says were already tried for this condition (medications, therapy sessions, injections, procedures). Empty list if none are documented
+- prior_treatments: List of treatments the patient has ALREADY received for this condition, as documented in the clinical history or justification (medications, therapy sessions, injections, procedures). Do NOT include treatments that the payer's decision or denial reason recommends, requires or says are missing. Empty list if none are documented
 - clinical_justification: One or two sentences summarizing the medical-necessity argument the document makes; null if there is none
 
 Return this exact structure:
@@ -198,7 +199,42 @@ Return only the JSON object. No explanation, no markdown, no extra text."""
     raw_status = str(result.get("approval_status") or "").strip().lower()
     result["approval_status"] = valid_statuses.get(raw_status, "Unknown")
 
+    result["prior_treatments"] = _documented_treatments(
+        result.get("prior_treatments"), document_text, result.get("denial_reason"))
     return result
+
+
+_GENERIC = {"therapy", "therapies", "dose", "doses", "session", "sessions", "therapeutic", "trial",
+            "trials", "prior", "daily", "oral", "with", "including", "treatment", "treatments",
+            "maximum", "minimum", "weeks", "months", "multiple", "injection", "injections"}
+
+
+def _documented_treatments(treatments, document_text: str, denial_reason) -> list:
+    """
+    Keep only treatments the document mentions outside the payer's denial text.
+
+    A denial often lists the treatments it expected ("recommend physical therapy
+    and NSAIDs first"). An LLM can mistake those for treatments already tried,
+    which would make an incomplete request look ready. Every distinctive word of
+    an extracted treatment must also appear in the rest of the document.
+    """
+    if not isinstance(treatments, list):
+        treatments = [treatments] if treatments else []
+    norm = lambda t: re.sub(r"\s+", " ", str(t or "")).lower()
+    rest = norm(document_text)
+    denial = norm(denial_reason).strip()
+    if denial and denial in rest:
+        rest = rest.replace(denial, " ")
+    elif denial:                                # denial paraphrased: drop the decision block
+        cut = max(rest.rfind("denial reason"), rest.rfind("authorization decision"))
+        if cut > 0:
+            rest = rest[:cut]
+    kept = []
+    for t in treatments:
+        words = [w for w in re.findall(r"[a-z][a-z\-]{3,}", norm(t)) if w not in _GENERIC]
+        if not words or all(re.search(r"\b" + re.escape(w), rest) for w in words):
+            kept.append(t)
+    return kept
 
 
 def analyze_denial(denial_reason: str, treatment: str, diagnosis: str) -> str:

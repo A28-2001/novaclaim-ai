@@ -152,10 +152,17 @@ def appeal_block(case: dict, key: str, saved: dict | None = None) -> None:
         return
     meta = out["metadata"]
     gaps = meta.get("placeholders", 0)
+    caught = meta.get("claims_replaced", 0)
+    check = ("grounding check ran" if meta.get("grounding_checked") else "grounding check unavailable")
+    if caught:
+        check = f"grounding check replaced {caught} unsupported statement{'s' if caught != 1 else ''}"
     H(f'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 10px">'
       f'<span class="nc-draft">Draft · requires clinician review</span>'
-      f'<span class="nc-small">{gaps} gap{"s" if gaps != 1 else ""} marked for the clinician'
+      f'<span class="nc-small">{gaps} gap{"s" if gaps != 1 else ""} marked for the clinician · {B.e(check)}'
       f'{" · cites " + B.e(meta["guideline"]) if meta.get("guideline") else ""}</span></div>')
+    if meta.get("claims_unresolved"):
+        st.warning("The grounding check flagged statements it couldn't replace automatically. Verify these "
+                   "against the record before using the draft: " + " | ".join(meta["claims_unresolved"])[:600])
     H(B.letter_html(out["letter"]))
     st.download_button("Download draft (.txt)", out["letter"], file_name=f"appeal_draft_{key}.txt",
                        mime="text/plain", key=f"dl_{key}")

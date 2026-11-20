@@ -8,7 +8,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from appeal_agent import get_guideline                      # noqa: E402
+from appeal_agent import _find_span, get_guideline         # noqa: E402
+from parser import _documented_treatments                   # noqa: E402
 from coverage_agent import CoverageAgent                    # noqa: E402
 from risk_scorer import ReadinessScorer                     # noqa: E402
 from ui.blocks import highlight_source, letter_html         # noqa: E402
@@ -94,6 +95,22 @@ def test_html_is_escaped():
     assert '<mark class="hl"' in out
     letter = letter_html("Dear <b>x</b>\n[CLINICIAN TO COMPLETE: PT notes]")
     assert "<b>x</b>" not in letter and "To complete: PT notes" in letter
+
+
+def test_recommended_treatments_are_not_counted_as_tried():
+    doc = ("Patient seen once in primary care, referred to orthopedics. Pain worse with activity.\n"
+           "Denial Reason: Recommend initiating physical therapy and NSAIDs first.")
+    denial = "Recommend initiating physical therapy and NSAIDs first."
+    assert _documented_treatments(["physical therapy", "NSAIDs", "activity modification"], doc, denial) == []
+    doc2 = "Failed physical therapy (20 sessions) and NSAIDs.\nDenial Reason: hyaluronic acid not attempted."
+    assert _documented_treatments(["Physical therapy (20 sessions)", "NSAIDs"], doc2,
+                                  "hyaluronic acid not attempted.") == ["Physical therapy (20 sessions)", "NSAIDs"]
+
+
+def test_grounding_replacement_tolerates_hyphen_variants():
+    letter = "He is a 58\u2011year\u2011old  male. Other text."
+    assert _find_span(letter, "He is a 58-year-old male.") == (0, 26)
+    assert _find_span(letter, "Not in the letter.") is None
 
 
 if __name__ == "__main__":
